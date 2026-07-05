@@ -59,11 +59,10 @@ const RoomPanel: React.FC = () => {
   const [editingName, setEditingName] = useState('');
   
   // 密码相关状态
-  const [createWithPassword, setCreateWithPassword] = useState(false); // 创建时是否设置密码
-  const [createPassword, setCreatePassword] = useState('');              // 创建时的密码
   const [joinPassword, setJoinPassword] = useState('');                  // 加入时的密码
   const [showJoinPassword, setShowJoinPassword] = useState(false);       // 加入时是否显示密码输入
   const [managePassword, setManagePassword] = useState('');              // 管理面板的新密码
+  const [inlineError, setInlineError] = useState('');                    // 内联错误消息
 
   const {
     rooms,
@@ -87,6 +86,7 @@ const RoomPanel: React.FC = () => {
     setUsername,
     setPassword,  // 新增
     deleteRoom,   // 新增
+    syncOwnedRoomsFromServer,  // 启动时同步房间列表
   } = useConnectionStore();
   
   // 获取当前房间的isHost状态
@@ -98,31 +98,45 @@ const RoomPanel: React.FC = () => {
     console.log('[RoomPanel] ownedRooms from store:', ownedRooms);
   }, [ownedRooms]);
   
+  // 启动时从服务器同步房间列表
+  useEffect(() => {
+    console.log('[RoomPanel] Mount: syncing rooms from server');
+    syncOwnedRoomsFromServer().catch((e: any) => {
+      console.warn('[RoomPanel] Initial sync failed:', e);
+    });
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // 自动清除内联错误（5秒后）
+  useEffect(() => {
+    if (inlineError) {
+      const timer = setTimeout(() => setInlineError(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [inlineError]);
+
   // 处理删除房间
   const handleDeleteRoom = useCallback((roomId: string) => {
     if (confirm(`确定要删除房间 "${roomId}" 吗?此操作不可恢复!`)) {
       deleteRoom(roomId);
-      // store会自动更新,不需要手动操作setOwnedRooms
     }
   }, [deleteRoom]);
 
   const handleCreateRoom = useCallback(async () => {
-    console.log(`[Z-ORDER] handleCreateRoom CLICKED`);
+    setInlineError('');
     try {
-      const roomId = await createRoom(createRoomName || undefined, undefined, createWithPassword ? createPassword : undefined);
-      console.log(`[Z-ORDER] handleCreateRoom SUCCESS: roomId=${roomId}`);
+      const roomId = await createRoom(createRoomName || undefined);
       setCreatedRoomId(roomId);
       const updated = addToHistory({ roomId, roomName: createRoomName || roomId, role: 'host' });
       setRoomHistory(updated);
       setCreateRoomName('');
-      setCreatePassword('');
-      setCreateWithPassword(false);
     } catch (err: any) {
-      console.log(`[Z-ORDER] handleCreateRoom ERROR: ${err?.message}`);
-      alert('创建房间失败: ' + (err?.message || '未知错误'));
+      const msg = err?.message || '未知错误';
+      console.log(`[RoomPanel] createRoom error: ${msg}`);
+      setInlineError('创建失败: ' + msg);
     }
-    console.log(`[Z-ORDER] handleCreateRoom DONE`);
-  }, [createRoom, createRoomName, createWithPassword, createPassword]);
+    // 重置弹幕窗口鼠标穿透（防止 alert/操作后卡住）
+    window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
+  }, [createRoom, createRoomName]);
 
   const handleJoinRoom = useCallback(async () => {
     const id = joinRoomId.trim();
@@ -263,7 +277,9 @@ const RoomPanel: React.FC = () => {
             </div>
             <button className="rp-btn rp-btn-secondary" style={{ marginTop: '8px' }} onClick={async () => {
               const result = await testServerConnection();
-              alert(result ? '服务器通信正常 ✓' : '服务器通信失败 ✗');
+              setInlineError(result ? '服务器通信正常 ✓' : '服务器通信失败 ✗');
+              // 重置弹幕窗口鼠标穿透
+              window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
             }}>
               🔍 测试服务器连接
             </button>
@@ -513,29 +529,6 @@ const RoomPanel: React.FC = () => {
                 创建房间
               </button>
             </div>
-            {/* 创建时可选密码 */}
-            <div className="rp-password-option">
-              <label className="rp-label rp-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={createWithPassword}
-                  onChange={(e) => setCreateWithPassword(e.target.checked)}
-                  style={{ marginRight: '6px' }}
-                />
-                创建时设置密码
-              </label>
-              {createWithPassword && (
-                <input
-                  className="rp-join-input rp-password-inline"
-                  type="password"
-                  value={createPassword}
-                  onChange={(e) => setCreatePassword(e.target.value)}
-                  placeholder="输入房间密码"
-                  
-                  
-                />
-              )}
-            </div>
             {createdRoomId && (
               <div className="rp-created-room-info">
                 <span className="rp-label">房间ID：</span>
@@ -601,6 +594,14 @@ const RoomPanel: React.FC = () => {
               )}
             </div>
           </div>
+
+      {/* 内联错误/提示消息 */}
+      {inlineError && (
+        <div className="rp-inline-message" onClick={() => setInlineError('')}>
+          {inlineError}
+          <span className="rp-inline-close">×</span>
+        </div>
+      )}
 
       {renderLogs()}
     </div>
