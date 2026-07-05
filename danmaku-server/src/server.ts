@@ -16,6 +16,9 @@ class DanmakuServer {
   // 新增: 房主到房间列表的映射 userId -> [roomId1, roomId2, ...]
   private hostRooms: Map<string, string[]> = new Map();
   
+  // IP 到 userId 的映射，确保同一 IP 始终同一个用户 ID
+  private ipToUserId: Map<string, string> = new Map();
+  
   // 房间配置
   private readonly MAX_ROOMS = 100; // 最大房间数
   private readonly MAX_USERS_PER_ROOM = 50; // 每个房间最大用户数
@@ -44,12 +47,29 @@ class DanmakuServer {
               // 保存当前房间ID
               roomId = newRoomId;
               
-              // 如果客户端提供了userId,验证是否已存在会话
-              userId = providedUserId || `srv_${Math.random().toString(36).substring(2, 10)}`;
+              // 基于 IP 分配固定 userId，同一 IP 始终同一个 ID
+              const clientIp = req.socket.remoteAddress?.replace('::ffff:', '') || 'unknown';
+              
+              if (this.ipToUserId.has(clientIp)) {
+                // 同一 IP 返回已有 ID
+                userId = this.ipToUserId.get(clientIp)!;
+                console.log(`[Server] IP ${clientIp} -> existing userId: ${userId}`);
+              } else if (providedUserId && !Array.from(this.ipToUserId.values()).includes(providedUserId)) {
+                // 客户端提供的 ID 未被占用，使用它
+                userId = providedUserId;
+                this.ipToUserId.set(clientIp, userId);
+                console.log(`[Server] IP ${clientIp} -> adopted provided userId: ${userId}`);
+              } else {
+                // 生成新 ID
+                userId = `u${Math.random().toString(36).substring(2, 8)}`;
+                this.ipToUserId.set(clientIp, userId);
+                console.log(`[Server] IP ${clientIp} -> new userId: ${userId}`);
+              }
+              
               let existingSession = null;
               
-              if (providedUserId && this.userSessions.has(providedUserId)) {
-                existingSession = this.userSessions.get(providedUserId)!;
+              if (this.userSessions.has(userId)) {
+                existingSession = this.userSessions.get(userId)!;
                 
                 // 如果用户在另一个房间,先将其从旧房间移除
                 if (existingSession.roomId !== roomId) {
@@ -65,9 +85,6 @@ class DanmakuServer {
                     }
                   }
                 }
-              } else if (!providedUserId) {
-                // 首次连接,生成新的唯一ID
-                console.log(`[Server] Generated new user ID: ${userId}`);
               }
               
               // 检查房间是否已存在

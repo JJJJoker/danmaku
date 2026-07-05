@@ -289,12 +289,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
   createRoom: async (roomName?: string, existingRoomId?: string, password?: string) => {
     const { username, rooms, connectionMode } = get();
+    console.log(`[Z-ORDER] createRoom START: connectionMode=${connectionMode}`);
 
     if (connectionMode === 'server') {
       const roomId = existingRoomId || roomName || 'default';
       
       // 如果已有连接，先断开
       if (serverConnection) {
+        console.log(`[Z-ORDER] createRoom: disconnecting existing connection`);
         serverConnection.disconnect();
         serverConnection = null;
       }
@@ -305,7 +307,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       get()._setupServerCallbacks(roomId, conn);
       
       // 传递密码参数和isCreate标志
+      console.log(`[Z-ORDER] createRoom: calling joinRoom...`);
       await conn.joinRoom(roomId, username || '匿名用户', password, true);  // isCreate=true
+      console.log(`[Z-ORDER] createRoom: joinRoom SUCCESS`);
       
       // 保存到我的房间列表(使用store方法)
       get().addOwnedRoom({
@@ -802,7 +806,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       onError: (error) => {
         set(state => {
           const room = state.rooms[roomId];
-          if (!room) return {};
+          if (!room) {
+            return { error };
+          }
           const updatedRooms = {
             ...state.rooms,
             [roomId]: { ...room, error },
@@ -890,7 +896,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       onError: (error) => {
         set(state => {
           const room = state.rooms[roomId];
-          if (!room) return {};
+          if (!room) {
+            return { error };
+          }
           const updatedRooms = {
             ...state.rooms,
             [roomId]: { ...room, error },

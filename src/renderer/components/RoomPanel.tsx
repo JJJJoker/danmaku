@@ -107,17 +107,21 @@ const RoomPanel: React.FC = () => {
   }, [deleteRoom]);
 
   const handleCreateRoom = useCallback(async () => {
+    console.log(`[Z-ORDER] handleCreateRoom CLICKED`);
     try {
       const roomId = await createRoom(createRoomName || undefined, undefined, createWithPassword ? createPassword : undefined);
+      console.log(`[Z-ORDER] handleCreateRoom SUCCESS: roomId=${roomId}`);
       setCreatedRoomId(roomId);
       const updated = addToHistory({ roomId, roomName: createRoomName || roomId, role: 'host' });
       setRoomHistory(updated);
       setCreateRoomName('');
       setCreatePassword('');
       setCreateWithPassword(false);
-    } catch {
-      // error handled by store
+    } catch (err: any) {
+      console.log(`[Z-ORDER] handleCreateRoom ERROR: ${err?.message}`);
+      alert('创建房间失败: ' + (err?.message || '未知错误'));
     }
+    console.log(`[Z-ORDER] handleCreateRoom DONE`);
   }, [createRoom, createRoomName, createWithPassword, createPassword]);
 
   const handleJoinRoom = useCallback(async () => {
@@ -285,8 +289,8 @@ const RoomPanel: React.FC = () => {
                     onChange={(e) => setManagePassword(e.target.value)}
                     placeholder="输入新密码"
                     className="rp-password-input"
-                    onFocus={() => window.electronAPI?.setTypingMode(true)}
-                    onBlur={() => window.electronAPI?.setTypingMode(false)}
+                    
+                    
                   />
                   <button 
                     className="rp-btn rp-btn-sm" 
@@ -410,7 +414,7 @@ const RoomPanel: React.FC = () => {
                             setEditingRoomId(null);
                           }
                         }}
-                        onFocus={() => window.electronAPI?.setTypingMode(true)}
+                        
                         autoFocus
                         maxLength={30}
                       />
@@ -486,8 +490,8 @@ const RoomPanel: React.FC = () => {
                 placeholder="匿名用户"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                onFocus={() => window.electronAPI?.setTypingMode(true)}
-                onBlur={() => window.electronAPI?.setTypingMode(false)}
+                
+                
                 maxLength={20}
               />
             </div>
@@ -501,8 +505,8 @@ const RoomPanel: React.FC = () => {
                 value={createRoomName}
                 onChange={(e) => setCreateRoomName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateRoom(); } }}
-                onFocus={() => window.electronAPI?.setTypingMode(true)}
-                onBlur={() => window.electronAPI?.setTypingMode(false)}
+                
+                
                 maxLength={30}
               />
               <button className="rp-btn rp-btn-primary" onClick={handleCreateRoom}>
@@ -527,8 +531,8 @@ const RoomPanel: React.FC = () => {
                   value={createPassword}
                   onChange={(e) => setCreatePassword(e.target.value)}
                   placeholder="输入房间密码"
-                  onFocus={() => window.electronAPI?.setTypingMode(true)}
-                  onBlur={() => window.electronAPI?.setTypingMode(false)}
+                  
+                  
                 />
               )}
             </div>
@@ -561,8 +565,8 @@ const RoomPanel: React.FC = () => {
                   }
                 }}
                 onKeyDown={handleJoinKeyDown}
-                onFocus={() => window.electronAPI?.setTypingMode(true)}
-                onBlur={() => window.electronAPI?.setTypingMode(false)}
+                
+                
                 maxLength={50}
               />
               <button
@@ -591,8 +595,8 @@ const RoomPanel: React.FC = () => {
                   value={joinPassword}
                   onChange={(e) => setJoinPassword(e.target.value)}
                   placeholder="输入房间密码"
-                  onFocus={() => window.electronAPI?.setTypingMode(true)}
-                  onBlur={() => window.electronAPI?.setTypingMode(false)}
+                  
+                  
                 />
               )}
             </div>

@@ -86,35 +86,36 @@ function createDanmakuWindow() {
   // 永远保持鼠标穿透
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  // 平台特定处理：设置窗口层级为最高
+  // 设置弹幕窗口层级：floating（高于普通窗口，低于控制面板）
   if (process.platform === 'darwin') {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    log('Danmaku window set to screen-saver level on macOS');
-  } else if (process.platform === 'win32') {
-    // Windows 上使用 'screen-saver' 层级确保弹幕在最顶层
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    log('Danmaku window set to screen-saver level on Windows');
   }
+  mainWindow.setAlwaysOnTop(true, 'floating');
+  log(`[Z-ORDER] Danmaku window set to floating level`);
 
-  // 防止窗口被激活/聚焦
+  // 监听弹幕窗口所有关键事件
   mainWindow.on('focus', () => {
-    log('Danmaku window focused - blurring immediately');
+    log(`[Z-ORDER] EVENT: danmaku FOCUS | alwaysOnTop=${mainWindow?.isAlwaysOnTop()}`);
     if (mainWindow) {
-      // 先blur
       mainWindow.blur();
-      
-      // Windows上需要额外处理：短暂隐藏再显示以强制重置焦点
       if (process.platform === 'win32') {
         setTimeout(() => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            // 确保窗口不被激活，延迟执行确保blur生效后再设置
             mainWindow.setIgnoreMouseEvents(true, { forward: true });
-            log('Danmaku window mouse events reset after blur');
+            log(`[Z-ORDER] danmaku mouseEvents reset after blur`);
           }
         }, 10);
       }
     }
+  });
+  mainWindow.on('blur', () => {
+    log(`[Z-ORDER] EVENT: danmaku BLUR | alwaysOnTop=${mainWindow?.isAlwaysOnTop()}`);
+  });
+  mainWindow.on('show', () => {
+    log(`[Z-ORDER] EVENT: danmaku SHOW | alwaysOnTop=${mainWindow?.isAlwaysOnTop()}`);
+  });
+  mainWindow.on('hide', () => {
+    log(`[Z-ORDER] EVENT: danmaku HIDE | alwaysOnTop=${mainWindow?.isAlwaysOnTop()}`);
   });
 
   // 加载渲染进程 - 只加载弹幕部分
@@ -193,8 +194,23 @@ function createControlWindow() {
   // 不需要鼠标穿透，正常接收事件
   controlWindow.setIgnoreMouseEvents(false);
 
-  // 设置较低的窗口层级（floating 低于 screen-saver）
-  controlWindow.setAlwaysOnTop(true, 'floating');
+  // 控制面板始终在弹幕窗口之上（screen-saver > floating）
+  controlWindow.setAlwaysOnTop(true, 'screen-saver');
+  log(`[Z-ORDER] Control window set to screen-saver level`);
+
+  // 监听控制面板所有关键事件
+  controlWindow.on('focus', () => {
+    log(`[Z-ORDER] EVENT: control FOCUS | alwaysOnTop=${controlWindow?.isAlwaysOnTop()} | danmaku.alwaysOnTop=${mainWindow?.isAlwaysOnTop()}`);
+  });
+  controlWindow.on('blur', () => {
+    log(`[Z-ORDER] EVENT: control BLUR | alwaysOnTop=${controlWindow?.isAlwaysOnTop()} | danmaku.alwaysOnTop=${mainWindow?.isAlwaysOnTop()}`);
+  });
+  controlWindow.on('show', () => {
+    log(`[Z-ORDER] EVENT: control SHOW | alwaysOnTop=${controlWindow?.isAlwaysOnTop()}`);
+  });
+  controlWindow.on('hide', () => {
+    log(`[Z-ORDER] EVENT: control HIDE | alwaysOnTop=${controlWindow?.isAlwaysOnTop()}`);
+  });
 
   // 加载渲染进程 - 只加载控制面板部分
   if (!app.isPackaged) {
@@ -229,6 +245,7 @@ function setupIpcHandlers() {
   ipcMain.on('set-ignore-mouse-events', (_event, ignore: boolean, options?: { forward: boolean }) => {
     if (mainWindow) {
       mainWindow.setIgnoreMouseEvents(ignore, options || { forward: true });
+      log(`[Z-ORDER] IPC set-ignore-mouse-events: ignore=${ignore}`);
     }
   });
 
@@ -244,22 +261,12 @@ function setupIpcHandlers() {
   ipcMain.on('window:toggle-always-on-top', () => {
     if (mainWindow) {
       const isOnTop = mainWindow.isAlwaysOnTop();
-      mainWindow.setAlwaysOnTop(!isOnTop);
+      mainWindow.setAlwaysOnTop(!isOnTop, 'floating');
+      log(`[Z-ORDER] toggle-always-on-top: danmaku alwaysOnTop=${!isOnTop}`);
     }
   });
 
-    // 输入模式切换：输入聚焦时降低窗口层级，让系统输入法候选框显示在最前面
-  ipcMain.on('set-typing-mode', (_event, isTyping: boolean) => {
-    if (mainWindow) {
-      if (isTyping) {
-        // 降低到 floating 级别，让 IME 候选框能显示在窗口上方
-        mainWindow.setAlwaysOnTop(true, 'floating');
-      } else {
-        // 恢复到 screen-saver 级别
-        mainWindow.setAlwaysOnTop(true, 'screen-saver');
-      }
-    }
-  });
+  // setTypingMode 已移除：窗口层级在创建时固定，不再运行时修改，避免 Windows 焦点跳动
 
   // 获取窗口信息
   ipcMain.handle('get-window-bounds', () => {
@@ -433,15 +440,14 @@ function toggleWindowVisibility() {
     mainWindow.hide();
     controlWindow?.hide();
     isWindowVisible = false;
+    log(`[Z-ORDER] Windows hidden`);
   } else {
     mainWindow.show();
     controlWindow?.show();
-    // 恢复窗口层级
-    if (process.platform === 'darwin') {
-      mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    } else {
-      mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    }
+    // 恢复窗口层级（保持固定值）
+    mainWindow.setAlwaysOnTop(true, 'floating');
+    controlWindow?.setAlwaysOnTop(true, 'screen-saver');
+    log(`[Z-ORDER] Windows shown: danmaku=floating, control=screen-saver`);
     isWindowVisible = true;
   }
 }

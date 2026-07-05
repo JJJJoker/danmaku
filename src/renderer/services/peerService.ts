@@ -983,6 +983,13 @@ export class ServerConnection {
             this.userId = message.payload.userId;  // 保存服务器分配的ID
             this.isHost = message.payload.isHost;
             
+            // 保存服务器分配的userId到本地存储，下次连接时复用
+            if (this.userId && this.userId !== this.persistentUserId) {
+              localStorage.setItem('funapp-user-id', this.userId);
+              this.persistentUserId = this.userId;
+              console.log(`[ServerConnection] Saved server-assigned userId: ${this.userId}`);
+            }
+            
             // 房主收到密码时保存到本地缓存
             if (message.payload.isHost && message.payload.password) {
               ServerConnection.saveRoomPassword(this.roomId, message.payload.password);
