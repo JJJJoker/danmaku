@@ -171,7 +171,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
           for (const entry of entries) {
             // 宽度固定（面板 CSS width 320px + padding 24px），高度用 offsetHeight（含 padding+border）
             const fixedWidth = 320 + 24;
-            const adjustedHeight = (entry.target as HTMLElement).offsetHeight;
+            // macOS 上需要额外加 10px 避免底部裁切
+            const adjustedHeight = (entry.target as HTMLElement).offsetHeight + 10;
             window.electronAPI?.resizeControlWindow(fixedWidth, adjustedHeight);
           }
         }, 50);
@@ -182,7 +183,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       // 立即触发一次大小调整
       const fixedWidth = 320 + 24;
       const rect = panelElement.getBoundingClientRect();
-      const adjustedHeight = Math.ceil(rect.height);
+      // macOS 上需要额外加 10px 避免底部裁切
+      const adjustedHeight = Math.ceil(rect.height) + 10;
       window.electronAPI?.resizeControlWindow(fixedWidth, adjustedHeight);
     }, 100);
 
@@ -371,6 +373,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
               }}
               maxLength={100}
+              style={{ position: 'relative', zIndex: 10000 }}
             />
             <button className="cp-send-btn" onClick={handleSendDanmaku} disabled={!inputText.trim()}>
               发送
@@ -392,7 +395,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       const panelElement = document.querySelector('.cp-panel');
                       if (!panelElement) return;
                       const rect = panelElement.getBoundingClientRect();
-                      const adjustedHeight = Math.ceil(rect.height);
+                      // macOS 上需要额外加 10px 避免底部裁切
+                      const adjustedHeight = Math.ceil(rect.height) + 10;
                       window.electronAPI?.resizeControlWindow(fixedWidth, adjustedHeight);
                     }, 80);
                   }
