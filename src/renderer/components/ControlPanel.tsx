@@ -3,6 +3,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage } from '../../shared/types';
+import { ServerConnection } from '../services/peerService';
 import RoomPanel from './RoomPanel';
 import HistoryPanel from './HistoryPanel';
 
@@ -291,7 +292,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     const message: DanmakuMessage = {
       id: `dm_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       text,
-      userId: 'local',
+      userId: ServerConnection.getPersistentUserId() || 'local',
       color: settings.color,
       fontSize: settings.fontSize,
       speed: settings.speed,
