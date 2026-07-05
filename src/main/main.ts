@@ -101,12 +101,14 @@ function createDanmakuWindow() {
   mainWindow.on('focus', () => {
     log('Danmaku window focused - blurring immediately');
     if (mainWindow) {
+      // 先blur
       mainWindow.blur();
-      // Windows上可能需要额外处理
+      
+      // Windows上需要额外处理：短暂隐藏再显示以强制重置焦点
       if (process.platform === 'win32') {
-        // 确保窗口不被激活，延迟执行确保blur生效后再设置
         setTimeout(() => {
-          if (mainWindow) {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            // 确保窗口不被激活，延迟执行确保blur生效后再设置
             mainWindow.setIgnoreMouseEvents(true, { forward: true });
             log('Danmaku window mouse events reset after blur');
           }
