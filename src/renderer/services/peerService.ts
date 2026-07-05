@@ -1235,6 +1235,11 @@ export class ServerConnection {
       console.error('Failed to clear room password:', e);
     }
   }
+
+  // 获取持久化用户ID（服务器分配的唯一ID）
+  static getPersistentUserId(): string | undefined {
+    return localStorage.getItem('funapp-user-id') || undefined;
+  }
 }
 
 // 单例导出
