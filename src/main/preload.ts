@@ -8,11 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('set-ignore-mouse-events', ignore, options);
   },
 
-  // 输入模式切换：降低窗口层级让输入法候选框不被遮挡
-  setTypingMode: (isTyping: boolean) => {
-    ipcRenderer.send('set-typing-mode', isTyping);
-  },
-
   // 窗口控制
   windowControl: {
     minimize: () => ipcRenderer.send('window:minimize'),

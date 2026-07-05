@@ -6,7 +6,7 @@ export default defineConfig({
     lib: {
       entry: 'src/main/main.ts',
       formats: ['cjs'],
-      fileName: () => 'index.js',
+      fileName: () => 'main.js',
     },
     rollupOptions: {
       // 外部化 electron 和 Node.js 内置模块

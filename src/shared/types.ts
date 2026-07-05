@@ -78,7 +78,6 @@ export interface DanmakuSettings {
 export interface ElectronAPI {
   platform: string;
   setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => void;
-  setTypingMode: (isTyping: boolean) => void;
   windowControl: {
     minimize: () => void;
     close: () => void;

@@ -7,7 +7,7 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "build:vite": "vite build --config vite.renderer.config.ts && npx tsc -p tsconfig.main.json && npx tsc -p tsconfig.preload.json",
+    "build:vite": "vite build --config vite.renderer.config.ts && vite build --config vite.main.config.ts && npx tsc -p tsconfig.preload.json",
     "build:win": "npm run build:vite && electron-builder --win --x64",
     "postbuild:win": "powershell -ExecutionPolicy Bypass -File scripts/replace-icon.ps1 -exePath \"dist-new\\win-unpacked\\云弹一下.exe\" -iconPath \"assets\\icon.ico\"",
     "build:mac": "electron-builder --mac",
