@@ -97,6 +97,12 @@ function createDanmakuWindow() {
     log('Danmaku window set to screen-saver level on Windows');
   }
 
+  // 防止窗口被激活/聚焦
+  mainWindow.on('focus', () => {
+    log('Danmaku window focused - blurring immediately');
+    mainWindow?.blur();
+  });
+
   // 加载渲染进程 - 只加载弹幕部分
   if (!app.isPackaged) {
     // 开发模式：使用开发服务器
