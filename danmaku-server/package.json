@@ -1,0 +1,20 @@
+{
+  "name": "danmaku-server",
+  "version": "1.0.0",
+  "description": "云弹一下 WebSocket弹幕服务器",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0"
+  }
+}

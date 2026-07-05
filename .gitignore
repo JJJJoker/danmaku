@@ -1,0 +1,11 @@
+node_modules/
+out/
+.vite/
+dist/
+dist-new/
+temp-extract-3/
+electron.zip
+*.zip
+*.exe
+*.log
+.DS_Store

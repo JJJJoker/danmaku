@@ -1,0 +1,98 @@
+/* 弹幕滚动动画 - 使用 transform 实现 GPU 加速 */
+@keyframes danmaku-scroll {
+  from {
+    transform: translateX(100vw);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* 弹幕层 */
+.danmaku-layer {
+  position: fixed;
+  pointer-events: none;
+  z-index: 999999; /* 最高层级 */
+  overflow: hidden;
+  /* 确保可见 */
+  opacity: 1 !important;
+}
+
+/* 边界框 */
+.danmaku-layer.show-border {
+  border: 2px dashed rgba(100, 150, 255, 0.5);
+}
+
+/* Resize handles */
+.overlay-resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 1000000;
+  background: rgba(100, 150, 255, 0.3);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+.overlay-resize-handle:hover {
+  background: rgba(100, 150, 255, 0.7);
+}
+.overlay-handle-n, .overlay-handle-s { left: 10%; right: 10%; height: 8px; cursor: ns-resize; }
+.overlay-handle-e, .overlay-handle-w { top: 10%; bottom: 10%; width: 8px; cursor: ew-resize; }
+.overlay-handle-n { top: -4px; }
+.overlay-handle-s { bottom: -4px; }
+.overlay-handle-e { right: -4px; }
+.overlay-handle-w { left: -4px; }
+.overlay-handle-nw, .overlay-handle-ne, .overlay-handle-sw, .overlay-handle-se {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(100, 150, 255, 0.6);
+}
+.overlay-handle-nw:hover, .overlay-handle-ne:hover, .overlay-handle-sw:hover, .overlay-handle-se:hover {
+  background: rgba(100, 150, 255, 1);
+}
+.overlay-handle-nw { top: -7px; left: -7px; cursor: nw-resize; }
+.overlay-handle-ne { top: -7px; right: -7px; cursor: ne-resize; }
+.overlay-handle-sw { bottom: -7px; left: -7px; cursor: sw-resize; }
+.overlay-handle-se { bottom: -7px; right: -7px; cursor: se-resize; }
+
+.overlay-move-area {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  cursor: move;
+  pointer-events: auto;
+}
+
+/* 单条弹幕 */
+.danmaku-item {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: bold;
+  line-height: 1.2;
+
+  /* GPU 加速 */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* 动画 */
+  animation: danmaku-scroll linear forwards;
+}
+
+/* 停留弹幕 */
+.danmaku-item.danmaku-stay {
+  left: 50%;
+  transform: translateX(-50%);
+  animation: danmaku-stay-fade linear forwards;
+}
+
+@keyframes danmaku-stay-fade {
+  0% { opacity: 0; transform: translateX(-50%); }
+  10% { opacity: 1; transform: translateX(-50%); }
+  80% { opacity: 1; transform: translateX(-50%); }
+  100% { opacity: 0; transform: translateX(-50%); }
+}

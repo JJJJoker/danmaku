@@ -1,0 +1,86 @@
+{
+  "name": "funapp",
+  "version": "1.0.0",
+  "description": "云弹一下 - 跨平台P2P弹幕应用",
+  "main": ".vite/main/main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "build:vite": "vite build --config vite.renderer.config.ts && npx tsc -p tsconfig.main.json && npx tsc -p tsconfig.preload.json",
+    "build:win": "npm run build:vite && electron-builder --win --x64",
+    "postbuild:win": "powershell -ExecutionPolicy Bypass -File scripts/replace-icon.ps1 -exePath \"dist-new\\win-unpacked\\云弹一下.exe\" -iconPath \"assets\\icon.ico\"",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder -mwl"
+  },
+  "dependencies": {
+    "framer-motion": "^11.0.0",
+    "peerjs": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.4.0",
+    "@electron-forge/maker-dmg": "^7.4.0",
+    "@electron-forge/maker-squirrel": "^7.4.0",
+    "@electron-forge/maker-zip": "^7.4.0",
+    "@electron-forge/plugin-vite": "^7.4.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.35.3",
+    "typescript": "^5.6.0",
+    "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.yundan.app",
+    "productName": "云弹一下",
+    "icon": "assets/icon_256.png",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist-new"
+    },
+    "files": [
+      ".vite/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon_256.png",
+      "sign": null,
+      "signAndEditExecutable": false,
+      "forceCodeSigning": false
+    },
+    "mac": {
+      "icon": "assets/icon_1024.png",
+      "category": "public.app-category.entertainment"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "云弹一下"
+    }
+  }
+}
