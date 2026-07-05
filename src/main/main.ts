@@ -100,7 +100,14 @@ function createDanmakuWindow() {
   // 防止窗口被激活/聚焦
   mainWindow.on('focus', () => {
     log('Danmaku window focused - blurring immediately');
-    mainWindow?.blur();
+    if (mainWindow) {
+      mainWindow.blur();
+      // Windows上可能需要额外处理
+      if (process.platform === 'win32') {
+        // 确保窗口不被激活
+        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      }
+    }
   });
 
   // 加载渲染进程 - 只加载弹幕部分
