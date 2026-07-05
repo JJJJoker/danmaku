@@ -196,9 +196,11 @@ function createControlWindow() {
   // 不需要鼠标穿透，正常接收事件
   controlWindow.setIgnoreMouseEvents(false);
 
-  // 控制面板始终在弹幕窗口之上（screen-saver > floating）
-  controlWindow.setAlwaysOnTop(true, 'screen-saver');
-  log(`[Z-ORDER] Control window set to screen-saver level`);
+  // macOS 上使用 normal-window 层级避免遮挡输入法候选框
+  // Windows/Linux 使用 screen-saver 保持在最上层
+  const level = process.platform === 'darwin' ? 'normal-window' : 'screen-saver';
+  controlWindow.setAlwaysOnTop(true, level as any);
+  log(`[Z-ORDER] Control window set to ${level} level (platform: ${process.platform})`);
 
   // 监听控制面板所有关键事件
   controlWindow.on('focus', () => {
