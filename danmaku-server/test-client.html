@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket弹幕服务器测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .error { background: #fff3cd; color: #856404; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            width: 200px;
+        }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            background: #f8f9fa;
+        }
+        .message {
+            padding: 5px;
+            margin: 2px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .log {
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket弹幕服务器测试</h1>
+    
+    <div id="connectionStatus" class="status disconnected">
+        状态: 未连接
+    </div>
+
+    <div>
+        <input type="text" id="serverUrl" placeholder="服务器地址" value="ws://localhost:8080">
+        <button onclick="connect()">连接</button>
+        <button onclick="disconnect()" id="disconnectBtn" disabled>断开</button>
+    </div>
+
+    <hr>
+
+    <div id="roomSection" style="display:none;">
+        <h3>房间信息</h3>
+        <input type="text" id="roomId" placeholder="房间ID" value="test-room">
+        <input type="text" id="username" placeholder="用户名" value="TestUser">
+        <button onclick="joinRoom()">加入房间</button>
+        
+        <hr>
+        
+        <h3>发送消息</h3>
+        <input type="text" id="messageText" placeholder="弹幕内容">
+        <button onclick="sendDanmaku()">发送弹幕</button>
+        
+        <hr>
+        
+        <h3>接收到的消息</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let userId = 'user_' + Math.random().toString(36).substring(2, 8);
+        let currentRoomId = '';
+
+        function updateStatus(status, message) {
+            const el = document.getElementById('connectionStatus');
+            el.className = 'status ' + status;
+            el.textContent = '状态: ' + message;
+        }
+
+        function addMessage(type, data) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.innerHTML = `<strong>[${type}]</strong> ${JSON.stringify(data)}`;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function connect() {
+            const url = document.getElementById('serverUrl').value;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                alert('已经连接!');
+                return;
+            }
+
+            updateStatus('connecting', '连接中...');
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                console.log('Connected to server');
+                updateStatus('connected', '已连接');
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('roomSection').style.display = 'block';
+                addMessage('INFO', '连接到服务器成功');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleMessage(message);
+                } catch (e) {
+                    console.error('Failed to parse message:', e);
+                }
+            };
+
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+                updateStatus('error', '连接错误');
+                addMessage('ERROR', '连接失败');
+            };
+
+            ws.onclose = () => {
+                console.log('Connection closed');
+                updateStatus('disconnected', '已断开');
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('roomSection').style.display = 'none';
+                addMessage('INFO', '连接已关闭');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function send(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            } else {
+                alert('未连接服务器!');
+            }
+        }
+
+        function joinRoom() {
+            const roomId = document.getElementById('roomId').value;
+            const username = document.getElementById('username').value;
+            
+            if (!roomId || !username) {
+                alert('请填写房间ID和用户名');
+                return;
+            }
+
+            currentRoomId = roomId;
+            
+            send({
+                type: 'join',
+                payload: {
+                    roomId: roomId,
+                    userId: userId,
+                    username: username
+                }
+            });
+
+            addMessage('SENT', { type: 'join', payload: { roomId, userId, username } });
+        }
+
+        function sendDanmaku() {
+            const text = document.getElementById('messageText').value;
+            
+            if (!text) {
+                alert('请输入弹幕内容');
+                return;
+            }
+
+            const danmaku = {
+                id: 'msg_' + Date.now(),
+                text: text,
+                userId: userId,
+                color: '#FFFFFF',
+                fontSize: 24,
+                speed: 'normal',
+                timestamp: Date.now()
+            };
+
+            send({
+                type: 'danmaku',
+                payload: danmaku
+            });
+
+            addMessage('SENT', { type: 'danmaku', payload: danmaku });
+            document.getElementById('messageText').value = '';
+        }
+
+        function handleMessage(message) {
+            addMessage('RECV', message);
+
+            switch (message.type) {
+                case 'init':
+                    console.log('Received init with', message.payload.danmakus.length, 'danmakus');
+                    break;
+                case 'danmaku':
+                    console.log('New danmaku:', message.payload.text);
+                    break;
+                case 'user-list':
+                    console.log('User list updated:', message.payload.users.length, 'users');
+                    break;
+                case 'pong':
+                    console.log('Pong received, latency:', Date.now() - message.payload.timestamp, 'ms');
+                    break;
+                case 'leave':
+                    console.log('User left:', message.payload.userId);
+                    break;
+            }
+        }
+
+        // 自动启动心跳
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN && currentRoomId) {
+                send({
+                    type: 'ping',
+                    payload: {
+                        timestamp: Date.now(),
+                        userId: userId
+                    }
+                });
+            }
+        }, 5000);
+
+        // 回车键发送
+        document.getElementById('messageText').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendDanmaku();
+            }
+        });
+    </script>
+</body>
+</html>

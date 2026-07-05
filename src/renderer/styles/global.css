@@ -1,0 +1,1445 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  /* 全局默认不接收鼠标事件 */
+  pointer-events: none;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.app-container {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  position: relative;
+}
+
+/* 弹幕层 - 完全穿透 */
+.danmaku-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 999999;
+}
+
+/* 控制区域 - 可交互 */
+.control-area {
+  position: relative;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+/* ===== ControlPanel 样式 ===== */
+
+.cp-wrapper {
+  pointer-events: auto;
+}
+
+.cp-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  margin: -4px -4px 8px -4px;
+  border-radius: 8px 8px 0 0;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.cp-drag-region {
+  -webkit-app-region: drag;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  cursor: move;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px 4px 0 0;
+  user-select: none;
+}
+
+.cp-drag-region span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cp-drag-handle:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cp-drag-dots {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 2px;
+  user-select: none;
+}
+.cp-trigger-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(20, 20, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.cp-trigger-btn:hover {
+  background: rgba(30, 30, 45, 0.95);
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.cp-panel {
+  width: 320px;
+  max-height: 520px;
+  overflow-y: auto;
+  background: rgba(20, 20, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  pointer-events: auto;
+}
+
+.cp-panel::-webkit-scrollbar {
+  width: 4px;
+}
+.cp-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cp-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+/* 折叠状态 - 强制限制高度 */
+.cp-panel.collapsed {
+  max-height: 100px !important;
+  min-height: 60px;
+}
+
+/* 确保输入区域在折叠状态下不会占据过多空间 */
+.cp-panel.collapsed .cp-input-area {
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+/* Header */
+.cp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cp-tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.cp-tab {
+  padding: 5px 14px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.cp-tab.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.cp-tab:hover:not(.active) {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.cp-collapse-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.cp-collapse-btn:hover {
+  background: rgba(255, 100, 100, 0.3);
+  color: #fff;
+}
+
+/* Input area */
+.cp-input-area {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.cp-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cp-input:focus {
+  border-color: rgba(100, 150, 255, 0.5);
+}
+
+.cp-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+.cp-send-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #5b7fff, #8b5cf6);
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.cp-send-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.cp-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cp-collapse-content-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.cp-collapse-content-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* Settings */
+.cp-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cp-setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cp-setting-row > label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.cp-slider-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-slider-group input[type="range"] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+}
+
+.cp-slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #5b7fff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.cp-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Speed buttons */
+.cp-speed-group {
+  display: flex;
+  gap: 4px;
+}
+
+.cp-speed-btn {
+  flex: 1;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.cp-speed-btn.active {
+  background: rgba(91, 127, 255, 0.3);
+  border-color: rgba(91, 127, 255, 0.5);
+  color: #fff;
+}
+
+.cp-speed-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Color group */
+.cp-color-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cp-color-btn {
+  width: 22px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cp-color-btn.active {
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.15);
+}
+
+.cp-color-btn:hover:not(.active) {
+  transform: scale(1.1);
+}
+
+.cp-color-input {
+  width: 60px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 10px;
+  outline: none;
+  font-family: monospace;
+}
+.cp-color-input:focus {
+  border-color: rgba(100, 150, 255, 0.5);
+}
+
+/* Section titles */
+.cp-section-title {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 2px;
+}
+
+/* Control row */
+.cp-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Switch */
+.cp-switch-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.cp-switch-label input[type="checkbox"] {
+  display: none;
+}
+
+.cp-switch-track {
+  width: 32px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.cp-switch-label input:checked + .cp-switch-track {
+  background: rgba(91, 127, 255, 0.6);
+}
+
+.cp-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.cp-switch-label input:checked + .cp-switch-track .cp-switch-thumb {
+  transform: translateX(14px);
+}
+
+.cp-clear-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  background: rgba(255, 100, 100, 0.1);
+  color: rgba(255, 150, 150, 0.9);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.cp-clear-btn:hover {
+  background: rgba(255, 100, 100, 0.25);
+}
+
+/* Window controls */
+.cp-window-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.cp-win-btn {
+  flex: 1;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.cp-win-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.cp-win-btn-close {
+  border-color: rgba(255, 100, 100, 0.3);
+}
+
+.cp-win-btn-close:hover {
+  background: rgba(255, 100, 100, 0.3);
+  color: #fff;
+}
+
+/* 说明标签 */
+.cp-about {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.cp-about-header h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.cp-about-author {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cp-about-section-block {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.cp-about-section-block h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.cp-about-section-block ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.8;
+}
+
+.cp-about-section-block li {
+  margin: 1px 0;
+}
+
+.cp-changelog-entry {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.cp-changelog-entry:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.cp-changelog-version {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8baeff;
+  background: rgba(91, 127, 255, 0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.cp-changelog-entry p {
+  margin: 6px 0 2px;
+  font-size: 11px;
+}
+
+.cp-changelog-entry ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.6;
+}
+
+.cp-changelog-entry li {
+  margin: 1px 0;
+}
+
+/* ===== RoomPanel 样式 ===== */
+
+.rp-container {
+  padding-top: 4px;
+}
+
+/* 房间标签列表 */
+.rp-room-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rp-room-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  transition: all 0.2s;
+}
+
+.rp-room-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rp-room-tab-active {
+  background: rgba(91, 127, 255, 0.15);
+  border-color: rgba(91, 127, 255, 0.4);
+  color: #8baeff;
+}
+
+.rp-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rp-tab-connected .rp-tab-dot {
+  background: #4ade80;
+}
+
+.rp-tab-connecting .rp-tab-dot {
+  background: #fbbf24;
+  animation: rp-pulse 1s ease-in-out infinite;
+}
+
+.rp-tab-error .rp-tab-dot {
+  background: #f87171;
+}
+
+@keyframes rp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.rp-tab-id {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 10px;
+}
+
+.rp-tab-role {
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.rp-tab-close {
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.rp-tab-close:hover {
+  background: rgba(255, 80, 80, 0.3);
+  color: rgba(255, 150, 150, 0.95);
+}
+
+/* 活跃房间信息 */
+.rp-active-room {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rp-status-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rp-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.rp-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #5b7fff;
+  border-radius: 50%;
+  animation: rp-spin 0.8s linear infinite;
+}
+
+@keyframes rp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.rp-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  text-align: center;
+}
+
+.rp-error-icon {
+  font-size: 24px;
+}
+
+.rp-error-text {
+  color: rgba(255, 150, 150, 0.9);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.rp-error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Buttons */
+.rp-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.rp-btn-primary {
+  background: linear-gradient(135deg, #5b7fff, #8b5cf6);
+  color: white;
+}
+
+.rp-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.rp-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rp-btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.rp-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.rp-btn-danger {
+  background: rgba(255, 80, 80, 0.2);
+  color: rgba(255, 150, 150, 0.95);
+  border: 1px solid rgba(255, 80, 80, 0.3);
+}
+
+.rp-btn-danger:hover {
+  background: rgba(255, 80, 80, 0.35);
+}
+
+.rp-btn-full {
+  width: 100%;
+}
+
+/* Connected panel */
+.rp-connected {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rp-status-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rp-status-host {
+  background: rgba(91, 127, 255, 0.2);
+  color: #8baeff;
+  border: 1px solid rgba(91, 127, 255, 0.3);
+}
+
+.rp-status-client {
+  background: rgba(80, 200, 120, 0.2);
+  color: #7edd9a;
+  border: 1px solid rgba(80, 200, 120, 0.3);
+}
+
+.rp-room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rp-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rp-room-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rp-room-code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #8baeff;
+  letter-spacing: 1px;
+}
+
+.rp-copy-btn {
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.rp-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rp-created-room-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(40, 167, 69, 0.1);
+  border: 1px solid rgba(40, 167, 69, 0.3);
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.rp-created-room-info .rp-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.rp-created-room-info .rp-room-code {
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Users section */
+.rp-users-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rp-user-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 72px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.rp-user-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.rp-user-empty {
+  color: rgba(255, 255, 255, 0.35);
+  font-style: italic;
+}
+
+.rp-user-dot {
+  width: 6px;
+  height: 6px;
+  background: #4ade80;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Disconnected panel */
+.rp-disconnected {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.rp-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+}
+
+.rp-divider::before,
+.rp-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rp-join-row {
+  display: flex;
+  gap: 6px;
+}
+
+.rp-username-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rp-username-row .rp-label {
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.rp-username-row .rp-join-input {
+  flex: 1;
+}
+
+.rp-join-input {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.rp-join-input:focus {
+  border-color: rgba(100, 150, 255, 0.5);
+}
+
+.rp-join-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* 我的房间 */
+.rp-owned-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+}
+
+.rp-owned-header {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.rp-owned-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rp-owned-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.rp-owned-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-owned-name {
+  font-weight: 500;
+  font-size: 12px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-owned-badge {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.rp-badge-offline {
+  background-color: #ccc;
+  color: #666;
+}
+
+.rp-sync-time {
+  color: #888;
+  font-size: 0.8em;
+  margin-left: 4px;
+}
+
+.rp-owned-time {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.rp-owned-item button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rp-owned-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 房间管理面板 */
+.rp-room-management {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rp-management-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #fff;
+}
+
+.rp-password-row {
+  display: flex;
+  gap: 8px;
+}
+
+.rp-password-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+
+.rp-password-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rp-management-tip {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  display: block;
+  margin-top: 4px;
+}
+
+.rp-password-status {
+  margin-bottom: 8px;
+}
+
+.rp-password-indicator {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rp-password-option {
+  margin-top: 6px;
+}
+
+.rp-checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  user-select: none;
+}
+
+.rp-password-inline {
+  margin-top: 6px;
+}
+
+/* 历史房间 */
+.rp-history-section {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
+}
+
+.rp-history-header {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+}
+
+.rp-history-list {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rp-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.rp-history-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-history-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rp-dot-online {
+  background: #4caf50;
+  box-shadow: 0 0 4px #4caf50;
+}
+
+.rp-dot-offline {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rp-history-role {
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.rp-history-host {
+  background: rgba(76, 175, 80, 0.3);
+  color: #81c784;
+}
+
+.rp-history-client {
+  background: rgba(33, 150, 243, 0.3);
+  color: #64b5f6;
+}
+
+.rp-history-name {
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.rp-history-edit-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(100, 150, 255, 0.5);
+  border-radius: 3px;
+  color: #fff;
+  font-size: 11px;
+  padding: 1px 4px;
+  outline: none;
+}
+
+.rp-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rp-history-tip {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.25);
+  margin-top: 4px;
+  text-align: right;
+}
+
+.rp-btn-sm {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rp-btn-sm:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.rp-btn-danger {
+  color: rgba(255, 100, 100, 0.7);
+  padding: 2px 5px;
+}
+
+.rp-btn-danger:hover {
+  background: rgba(255, 100, 100, 0.2);
+  color: #ff6b6b;
+}
+
+/* Logs panel */
+.rp-logs {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 8px;
+}
+.rp-logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 4px;
+}
+.rp-logs-clear {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 6px;
+}
+.rp-logs-clear:hover {
+  color: rgba(255,255,255,0.7);
+}
+.rp-logs-content {
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.6);
+}
+.rp-log-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== HistoryPanel 样式 ===== */
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.history-list {
+  max-height: 350px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.history-list::-webkit-scrollbar {
+  width: 4px;
+}
+.history-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.history-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.history-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.history-time {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.history-sender {
+  font-size: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-content {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  word-break: break-all;
+}
+
+.history-empty {
+  text-align: center;
+  padding: 24px 0;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.history-clear-btn {
+  align-self: flex-end;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  background: rgba(255, 100, 100, 0.1);
+  color: rgba(255, 150, 150, 0.9);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.history-clear-btn:hover {
+  background: rgba(255, 100, 100, 0.25);
+}
+
+.history-room {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 9px;
+  color: rgba(139, 174, 255, 0.7);
+  flex-shrink: 0;
+}
+
+/* Standalone mode styles */
+.cp-panel-standalone {
+  /* 移除 fixed 定位，让窗口本身控制位置 */
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+}

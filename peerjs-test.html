@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerJS 连通性测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peer.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 300px;
+        }
+        .log {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px;
+        }
+        .log-entry.error {
+            color: red;
+        }
+        .log-entry.success {
+            color: green;
+        }
+        .log-entry.info {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 PeerJS 连通性测试工具</h1>
+        
+        <div class="section">
+            <h2>步骤1: 创建测试房间 (主机)</h2>
+            <button id="createBtn" onclick="createRoom()">创建房间</button>
+            <div id="hostStatus" class="status disconnected">状态: 未连接</div>
+            <div id="roomIdDisplay" style="margin-top: 10px; font-weight: bold;"></div>
+        </div>
+
+        <div class="section">
+            <h2>步骤2: 加入房间 (客户端)</h2>
+            <input type="text" id="roomIdInput" placeholder="输入房间ID">
+            <button id="joinBtn" onclick="joinRoom()">加入房间</button>
+            <div id="clientStatus" class="status disconnected">状态: 未连接</div>
+        </div>
+
+        <div class="section">
+            <h2>步骤3: 发送测试消息</h2>
+            <button id="sendBtn" onclick="sendMessage()" disabled>发送测试消息</button>
+            <div id="messageStatus"></div>
+        </div>
+
+        <div class="section">
+            <h2>日志输出</h2>
+            <div id="log" class="log"></div>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+    </div>
+
+    <script>
+        let hostPeer = null;
+        let clientPeer = null;
+        let hostConnection = null;
+        let clientConnection = null;
+        let currentRoomId = '';
+
+        function addLog(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStatus(elementId, status, message) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${status}`;
+            element.textContent = `状态: ${message}`;
+        }
+
+        function createRoom() {
+            if (hostPeer) {
+                addLog('主机已存在,请先刷新页面', 'error');
+                return;
+            }
+
+            // 生成随机房间ID
+            const randomId = Math.random().toString(36).substring(2, 8);
+            currentRoomId = `test-${randomId}`;
+            const hostId = `${currentRoomId}_host`;
+
+            addLog(`正在创建房间: ${currentRoomId}`, 'info');
+            updateStatus('hostStatus', 'connecting', '连接中...');
+
+            hostPeer = new Peer(hostId, {
+                host: '0.peerjs.com',
+                port: 443,
+                secure: true,
+                debug: 2,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        // 免费公共TURN服务器
+                        { 
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ],
+                },
+            });
+
+            hostPeer.on('open', (id) => {
+                addLog(`✅ 主机创建成功! ID: ${id}`, 'success');
+                updateStatus('hostStatus', 'connected', '已连接');
+                document.getElementById('roomIdDisplay').innerHTML = 
+                    `<strong>房间ID:</strong> <span style="color: #007bff; font-size: 18px;">${currentRoomId}</span>`;
+                addLog(`请将房间ID "${currentRoomId}" 告诉你的朋友`, 'info');
+            });
+
+            hostPeer.on('connection', (conn) => {
+                addLog(`📞 收到客户端连接请求`, 'info');
+                
+                conn.on('open', () => {
+                    addLog(`✅ 客户端连接成功!`, 'success');
+                    hostConnection = conn;
+                    document.getElementById('sendBtn').disabled = false;
+                    
+                    // 发送欢迎消息
+                    conn.send({ type: 'welcome', message: 'Hello from Host!' });
+                    addLog('已发送欢迎消息', 'info');
+                });
+
+                conn.on('data', (data) => {
+                    addLog(`📨 收到消息: ${JSON.stringify(data)}`, 'success');
+                });
+
+                conn.on('close', () => {
+                    addLog('❌ 客户端断开连接', 'error');
+                    hostConnection = null;
+                    document.getElementById('sendBtn').disabled = true;
+                });
+
+                conn.on('error', (err) => {
+                    addLog(`❌ 连接错误: ${err.message}`, 'error');
+                });
+            });
+
+            hostPeer.on('error', (err) => {
+                addLog(`❌ 主机错误: ${err.message}`, 'error');
+                updateStatus('hostStatus', 'disconnected', '连接失败');
+            });
+        }
+
+        function joinRoom() {
+            if (clientPeer) {
+                addLog('客户端已存在,请先刷新页面', 'error');
+                return;
+            }
+
+            const roomId = document.getElementById('roomIdInput').value.trim();
+            if (!roomId) {
+                addLog('请输入房间ID', 'error');
+                return;
+            }
+
+            const clientId = `${roomId}_client_${Math.random().toString(36).substring(2, 6)}`;
+            const hostId = `${roomId}_host`;
+
+            addLog(`正在加入房间: ${roomId}`, 'info');
+            updateStatus('clientStatus', 'connecting', '连接中...');
+
+            clientPeer = new Peer(clientId, {
+                host: '0.peerjs.com',
+                port: 443,
+                secure: true,
+                debug: 2,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        // 免费公共TURN服务器
+                        { 
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ],
+                },
+            });
+
+            clientPeer.on('open', () => {
+                addLog(`✅ 客户端Peer创建成功`, 'success');
+                
+                addLog(`正在连接到主机: ${hostId}`, 'info');
+                clientConnection = clientPeer.connect(hostId, {
+                    reliable: true,
+                });
+
+                clientConnection.on('open', () => {
+                    addLog(`✅ 成功连接到主机!`, 'success');
+                    updateStatus('clientStatus', 'connected', '已连接');
+                    document.getElementById('sendBtn').disabled = false;
+                    
+                    // 发送测试消息
+                    clientConnection.send({ type: 'hello', message: 'Hello from Client!' });
+                    addLog('已发送问候消息', 'info');
+                });
+
+                clientConnection.on('data', (data) => {
+                    addLog(`📨 收到消息: ${JSON.stringify(data)}`, 'success');
+                });
+
+                clientConnection.on('close', () => {
+                    addLog('❌ 与主机断开连接', 'error');
+                    updateStatus('clientStatus', 'disconnected', '已断开');
+                    clientConnection = null;
+                    document.getElementById('sendBtn').disabled = true;
+                });
+
+                clientConnection.on('error', (err) => {
+                    addLog(`❌ 连接错误: ${err.message}`, 'error');
+                    updateStatus('clientStatus', 'disconnected', '连接失败');
+                });
+            });
+
+            clientPeer.on('error', (err) => {
+                addLog(`❌ 客户端错误: ${err.message}`, 'error');
+                updateStatus('clientStatus', 'disconnected', '连接失败');
+            });
+        }
+
+        function sendMessage() {
+            const message = {
+                type: 'test',
+                timestamp: new Date().toISOString(),
+                data: 'Test message at ' + new Date().toLocaleTimeString()
+            };
+
+            if (hostConnection && hostConnection.open) {
+                hostConnection.send(message);
+                addLog('📤 主机发送测试消息', 'info');
+            }
+
+            if (clientConnection && clientConnection.open) {
+                clientConnection.send(message);
+                addLog('📤 客户端发送测试消息', 'info');
+            }
+        }
+
+        // 页面加载完成提示
+        window.onload = () => {
+            addLog('PeerJS 连通性测试工具已就绪', 'info');
+            addLog('请按照步骤操作: 1.主机创建房间 → 2.客户端加入房间 → 3.发送测试消息', 'info');
+        };
+    </script>
+</body>
+</html>

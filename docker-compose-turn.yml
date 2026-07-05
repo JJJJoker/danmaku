@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: turn-server
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      # TURN服务器配置
+      - TURNSERVER_EXTERNAL_IP=${SERVER_IP}
+      - TURNSERVER_USERNAME=${TURN_USER}
+      - TURNSERVER_PASSWORD=${TURN_PASS}
+      - TURNSERVER_REALM=myturnserver.com
+    volumes:
+      - ./turnserver.conf:/etc/turnserver.conf:ro
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "49152-65535:49152-65535/udp"
+    command: >
+      --listening-port=3478
+      --tls-listening-port=5349
+      --external-ip=${SERVER_IP}
+      --user=${TURN_USER}:${TURN_PASS}
+      --realm=myturnserver.com
+      --fingerprint
+      --lt-cred-mech
+      --verbose
+      --no-tlsv1
+      --no-tlsv1_1
+      --min-port=49152
+      --max-port=65535
+      --no-multicast-peers
+      --no-cli
