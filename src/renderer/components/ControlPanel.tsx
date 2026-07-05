@@ -147,71 +147,32 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     };
   }, [isDragging, position]);
 
-  // 瞬时焦点管理：仅通过输入框的 focus/blur 控制穿透状态
-  // 不再使用 document 级别的 mousedown/mouseup，避免在加入房间后
-  // 弹幕窗口变为不穿透并阻挡控制面板的交互
+  // 确保初始化时弹幕窗口保持穿透
   useEffect(() => {
-    // 确保初始化时弹幕窗口保持穿透
     window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
   }, []);
 
-  // 在 standalone 模式下，动态调整窗口大小以匹配内容
+  // 在 standalone 模式下，动态调整窗口高度以匹配内容（宽度固定避免振荡）
   useEffect(() => {
     if (!standalone) return;
-
-    window.electronAPI?.log('[ControlPanel] Setting up ResizeObserver for window resizing');
-    console.log('[ControlPanel] Setting up ResizeObserver for window resizing');
 
     // 延迟执行，等待 DOM 更新
     const timer = setTimeout(() => {
       const panelElement = document.querySelector('.cp-panel');
-      if (!panelElement) {
-        window.electronAPI?.log('[ControlPanel] Panel element not found');
-        console.warn('[ControlPanel] Panel element not found');
-        return;
-      }
-
-      window.electronAPI?.log('[ControlPanel] Panel element found, creating ResizeObserver');
-      console.log('[ControlPanel] Panel element found, creating ResizeObserver');
+      if (!panelElement) return;
 
       // 创建 ResizeObserver 并保存到 ref
       resizeObserverRef.current = new ResizeObserver((entries) => {
-        // 清除之前的防抖定时器
         if (resizeDebounceRef.current) {
           clearTimeout(resizeDebounceRef.current);
         }
 
-        // 使用防抖，延迟 150ms 再调整窗口大小（给浏览器足够时间完成布局重排）
         resizeDebounceRef.current = setTimeout(() => {
           for (const entry of entries) {
-            const { width, height } = entry.contentRect;
-            const minWidth = 300;
-            const minHeight = isContentCollapsed ? 60 : 200; // 折叠时更小
-            
-            console.log('[ControlPanel] ResizeObserver triggered');
-            console.log('[ControlPanel] Panel className:', panelElement.className);
-            const computedStyle = window.getComputedStyle(panelElement);
-            console.log('[ControlPanel] Computed maxHeight:', computedStyle.maxHeight);
-            console.log('[ControlPanel] Computed minHeight:', computedStyle.minHeight);
-            console.log('[ControlPanel] Actual offsetHeight:', panelElement.offsetHeight);
-            console.log('[ControlPanel] isContentCollapsed:', isContentCollapsed);
-            console.log('[ControlPanel] Content rect size:', width, 'x', height);
-            console.log('[ControlPanel] Calculated minHeight:', minHeight);
-            console.log('[ControlPanel] Panel offsetHeight:', panelElement.offsetHeight);
-            console.log('[ControlPanel] Panel clientHeight:', panelElement.clientHeight);
-            console.log('[ControlPanel] Panel scrollHeight:', panelElement.scrollHeight);
-            
-            const inputArea = panelElement.querySelector('.cp-input-area');
-            if (inputArea) {
-              console.log('[ControlPanel] Input area height:', (inputArea as HTMLElement).offsetHeight);
-            }
-            
-            const adjustedWidth = Math.max(Math.ceil(width), minWidth);
-            const adjustedHeight = Math.max(Math.ceil(height), minHeight);
-            
-            window.electronAPI?.log(`[ControlPanel] Resizing window to: ${adjustedWidth}x${adjustedHeight}`);
-            console.log('[ControlPanel] Resizing window to:', adjustedWidth, 'x', adjustedHeight);
-            window.electronAPI?.resizeControlWindow(adjustedWidth, adjustedHeight);
+            // 宽度固定（面板 CSS width 320px + padding 24px），高度用 offsetHeight（含 padding+border）
+            const fixedWidth = 320 + 24;
+            const adjustedHeight = (entry.target as HTMLElement).offsetHeight;
+            window.electronAPI?.resizeControlWindow(fixedWidth, adjustedHeight);
           }
         }, 50);
       });
@@ -219,16 +180,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       resizeObserverRef.current.observe(panelElement);
 
       // 立即触发一次大小调整
+      const fixedWidth = 320 + 24;
       const rect = panelElement.getBoundingClientRect();
-      const minWidth = 300;
-      const adjustedWidth = Math.max(Math.ceil(rect.width), minWidth);
-      const adjustedHeight = Math.max(Math.ceil(rect.height), 200);
-      window.electronAPI?.log(`[ControlPanel] Initial window size: ${adjustedWidth}x${adjustedHeight}`);
-      console.log('[ControlPanel] Initial window size:', adjustedWidth, 'x', adjustedHeight);
-      window.electronAPI?.resizeControlWindow(adjustedWidth, adjustedHeight);
+      const adjustedHeight = Math.ceil(rect.height);
+      window.electronAPI?.resizeControlWindow(fixedWidth, adjustedHeight);
     }, 100);
 
-    // 清理函数 - 在 useEffect 顶层返回，而不是在 setTimeout 内部
+    // 清理函数
     return () => {
       clearTimeout(timer);
       if (resizeDebounceRef.current) {
@@ -240,11 +198,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
         resizeObserverRef.current = null;
       }
     };
-  }, [standalone, isContentCollapsed, activeTab]);
+  }, [standalone]); // 只依赖 standalone，不在 isContentCollapsed 变化时重建
 
   // 如果是独立窗口模式，使用相对定位而不是固定定位
   const panelStyle = standalone 
-    ? { position: 'relative' as const, width: '100%', minHeight: '100%' }
+    ? { position: 'relative' as const, width: '100%', minHeight: isContentCollapsed ? 'auto' : '100%' }
     : { position: 'fixed' as const, left: position.x, top: position.y, zIndex: 9999 };
 
   const handleDragStart = (e: React.MouseEvent) => {
@@ -420,11 +378,25 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
             <button
               className="cp-collapse-content-btn"
               onClick={() => {
-                console.log('[ControlPanel] Collapse button clicked! Current state:', isContentCollapsed);
-                window.electronAPI?.log(`[ControlPanel] Collapse button clicked! Current state: ${isContentCollapsed}`);
-                setIsContentCollapsed(!isContentCollapsed);
-                console.log('[ControlPanel] New state will be:', !isContentCollapsed);
-                window.electronAPI?.log(`[ControlPanel] New state will be: ${!isContentCollapsed}`);
+                const willCollapse = !isContentCollapsed;
+                setIsContentCollapsed(willCollapse);
+                // 折叠/展开时立即调整窗口大小
+                if (standalone) {
+                  const fixedWidth = 344; // 320 + 24
+                  if (willCollapse) {
+                    // 折叠：只保留输入框高度
+                    window.electronAPI?.resizeControlWindow(fixedWidth, 50);
+                  } else {
+                    // 展开：延迟等 DOM 更新后测量实际高度
+                    setTimeout(() => {
+                      const panelElement = document.querySelector('.cp-panel');
+                      if (!panelElement) return;
+                      const rect = panelElement.getBoundingClientRect();
+                      const adjustedHeight = Math.ceil(rect.height);
+                      window.electronAPI?.resizeControlWindow(fixedWidth, adjustedHeight);
+                    }, 80);
+                  }
+                }
               }}
               title={isContentCollapsed ? '展开面板' : '折叠面板'}
             >

@@ -180,7 +180,9 @@ function createControlWindow() {
     frame: false,
     alwaysOnTop: true,  // 保持在最顶层，但使用 floating 级别
     hasShadow: true,
-    resizable: false,
+    resizable: true,
+    minWidth: 200,
+    minHeight: 40,
     skipTaskbar: false,  // 在任务栏显示
     focusable: true,     // 可以获取焦点
     backgroundColor: '#00000000',
@@ -241,7 +243,7 @@ function createControlWindow() {
 }
 
 function setupIpcHandlers() {
-  // 动态切换鼠标穿透
+  // 动态切换鼠标穿透（弹幕窗口）
   ipcMain.on('set-ignore-mouse-events', (_event, ignore: boolean, options?: { forward: boolean }) => {
     if (mainWindow) {
       mainWindow.setIgnoreMouseEvents(ignore, options || { forward: true });
@@ -285,16 +287,18 @@ function setupIpcHandlers() {
 
   // 调整控制面板窗口大小
   ipcMain.on('resize-control-window', (_event, width: number, height: number) => {
-    log(`Received resize-control-window event: ${width}x${height}`);
+    log(`[RESIZE] Received resize-control-window: ${width}x${height}`);
     if (controlWindow && !controlWindow.isDestroyed()) {
       try {
-        controlWindow.setSize(width, height);
-        log(`✅ Control window resized to ${width}x${height}`);
+        const oldBounds = controlWindow.getBounds();
+        controlWindow.setBounds({ width, height });
+        const newBounds = controlWindow.getBounds();
+        log(`[RESIZE] Control window: ${oldBounds.width}x${oldBounds.height} -> ${newBounds.width}x${newBounds.height} (requested: ${width}x${height})`);
       } catch (error) {
-        log(`❌ Failed to resize control window: ${error}`);
+        log(`[RESIZE] Failed: ${error}`);
       }
     } else {
-      log(`❌ Control window is null or destroyed`);
+      log(`[RESIZE] Control window is null or destroyed`);
     }
   });
 
@@ -343,6 +347,24 @@ app.whenReady().then(() => {
   createControlWindow();  // 创建控制面板窗口
   createTray();
   setupIpcHandlers();  // 注册所有 IPC 处理器
+
+  // 定期重新断言 z-order（防止截图、全屏应用等打乱层级）
+  setInterval(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && isWindowVisible) {
+      if (!mainWindow.isAlwaysOnTop()) {
+        mainWindow.setAlwaysOnTop(true, 'floating');
+        log(`[Z-ORDER] REASSERT: danmaku alwaysOnTop restored to floating`);
+      }
+      // 确保弹幕窗口始终保持鼠标穿透
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    }
+    if (controlWindow && !controlWindow.isDestroyed() && isWindowVisible) {
+      if (!controlWindow.isAlwaysOnTop()) {
+        controlWindow.setAlwaysOnTop(true, 'screen-saver');
+        log(`[Z-ORDER] REASSERT: control alwaysOnTop restored to screen-saver`);
+      }
+    }
+  }, 5000); // 每5秒检查一次
 
   // 注册快捷键打开 DevTools（开发和打包版都可用）
   globalShortcut.register('CommandOrControl+Shift+I', () => {
@@ -400,9 +422,9 @@ function createTray() {
   const updateContextMenu = () => {
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: isWindowVisible ? '最小化（隐藏弹幕）' : '正常展开（显示弹幕）',
+        label: isWindowVisible ? '隐藏弹幕窗口' : '显示弹幕窗口',
         click: () => {
-          log('Tray context menu: toggle visibility clicked');
+          log('Tray menu: toggle visibility clicked');
           toggleWindowVisibility();
           updateContextMenu();
         },
@@ -411,7 +433,7 @@ function createTray() {
       {
         label: '退出',
         click: () => {
-          log('Tray context menu: quit clicked');
+          log('Tray menu: quit clicked');
           app.quit();
         },
       },
@@ -419,15 +441,15 @@ function createTray() {
     tray?.setContextMenu(contextMenu);
   };
 
-  // 点击 Tray 图标切换显示/隐藏
+  // 左键和右键都弹出菜单
   tray.on('click', () => {
-    log('Tray clicked!');
-    toggleWindowVisibility();
-    updateContextMenu();
+    log('Tray clicked');
+    tray?.popUpContextMenu();
   });
 
   tray.on('right-click', () => {
-    log('Tray right-clicked!');
+    log('Tray right-clicked');
+    tray?.popUpContextMenu();
   });
 
   updateContextMenu();
@@ -438,16 +460,13 @@ function toggleWindowVisibility() {
   if (!mainWindow) return;
   if (isWindowVisible) {
     mainWindow.hide();
-    controlWindow?.hide();
     isWindowVisible = false;
-    log(`[Z-ORDER] Windows hidden`);
+    log(`[Z-ORDER] Danmaku window hidden`);
   } else {
     mainWindow.show();
-    controlWindow?.show();
-    // 恢复窗口层级（保持固定值）
     mainWindow.setAlwaysOnTop(true, 'floating');
-    controlWindow?.setAlwaysOnTop(true, 'screen-saver');
-    log(`[Z-ORDER] Windows shown: danmaku=floating, control=screen-saver`);
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    log(`[Z-ORDER] Danmaku window shown: floating`);
     isWindowVisible = true;
   }
 }
