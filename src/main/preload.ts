@@ -20,14 +20,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('resize-control-window', width, height);
   },
 
+  // macOS: 设置控制面板层级（用于输入法候选框显示）
+  setControlWindowLevel: (level: 'normal' | 'high') => {
+    ipcRenderer.send('set-control-window-level', level);
+  },
+
+  // 语音弹幕：弹幕窗口 -> 主进程 -> 控制面板朗读
+  speakDanmaku: (text: string, options?: { rate?: number; volume?: number; timestamp?: number }) => {
+    ipcRenderer.send('speak-danmaku', text, options);
+  },
+  stopSpeakDanmaku: () => {
+    ipcRenderer.send('stop-speak-danmaku');
+  },
+  // 控制面板接收朗读请求（返回取消订阅函数）
+  onSpeakDanmaku: (callback: (data: { text: string; rate: number; volume: number; timestamp: number }) => void) => {
+    const listener = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('speak-danmaku-request', listener);
+    return () => ipcRenderer.removeListener('speak-danmaku-request', listener);
+  },
+  onStopSpeakDanmaku: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('stop-speak-danmaku-request', listener);
+    return () => ipcRenderer.removeListener('stop-speak-danmaku-request', listener);
+  },
+
   // 转发弹幕到其他窗口
   forwardDanmakuToWindow: (danmakuData: any) => {
     ipcRenderer.send('forward-danmaku-to-window', danmakuData);
   },
 
-  // 接收来自其他窗口的弹幕
+  // 接收来自其他窗口的弹幕（返回取消订阅函数）
   onReceiveDanmakuFromControl: (callback: (danmakuData: any) => void) => {
-    ipcRenderer.on('receive-danmaku-from-control', (_event, data) => callback(data));
+    const listener = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('receive-danmaku-from-control', listener);
+    return () => ipcRenderer.removeListener('receive-danmaku-from-control', listener);
   },
 
   // 获取窗口信息

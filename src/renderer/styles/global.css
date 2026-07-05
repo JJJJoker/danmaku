@@ -217,6 +217,22 @@ html, body {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/* 语音弹幕输入区 */
+.cp-voice-input-area {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(100, 150, 255, 0.2);
+}
+.cp-voice-input-area .cp-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cp-voice-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(100, 100, 100, 0.5) !important;
+}
+
 .cp-input {
   flex: 1;
   height: 32px;

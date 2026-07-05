@@ -137,6 +137,10 @@ const DanmakuItem: React.FC<DanmakuItemProps> = ({ item }) => {
           [{item.userId}]
         </span>
       )}
+      {/* 语音弹幕标记：三个喇叭图标 */}
+      {item.isVoice && (
+        <span style={{ marginRight: '4px' }}>🔊🔊🔊</span>
+      )}
       {item.text}
     </div>
   );

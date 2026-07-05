@@ -4,6 +4,7 @@ import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage } from '../../shared/types';
 import { ServerConnection } from '../services/peerService';
+import { ttsService } from '../services/ttsService';
 import RoomPanel from './RoomPanel';
 import HistoryPanel from './HistoryPanel';
 
@@ -97,6 +98,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
   const [activeTab, setActiveTab] = useState<'settings' | 'room' | 'history' | 'about'>('settings');
   const [inputText, setInputText] = useState('');
   const [customColor, setCustomColor] = useState('');
+  const [voiceInputText, setVoiceInputText] = useState('');
+  const [voiceCooldown, setVoiceCooldown] = useState(0); // 剩余秒数
 
   // 拖拽位置状态
   const [position, setPosition] = useState(() => {
@@ -146,6 +149,35 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       window.removeEventListener('mouseup', handleUp);
     };
   }, [isDragging, position]);
+
+  // 语音弹幕：监听来自弹幕窗口的朗读请求
+  useEffect(() => {
+    console.log('[ControlPanel] Setting up TTS IPC listeners');
+    console.log('[ControlPanel] ttsService available:', ttsService.isAvailable());
+    console.log('[ControlPanel] window.speechSynthesis available:', !!window.speechSynthesis);
+    window.electronAPI?.log(`[ControlPanel] TTS setup: ttsService.available=${ttsService.isAvailable()}, speechSynthesis=${!!window.speechSynthesis}`);
+
+    // 接收朗读请求（发送端已有 60s 倒计时限频，接收端无需再限频）
+    const unsubSpeak = window.electronAPI?.onSpeakDanmaku((data) => {
+      console.log('[ControlPanel] 📨 Received speak IPC:', { text: data.text.substring(0, 30), rate: data.rate, volume: data.volume });
+      window.electronAPI?.log(`[ControlPanel] Received speak IPC: ${data.text.substring(0, 30)}`);
+      ttsService.speak(data.text, { rate: data.rate, volume: data.volume, timestamp: data.timestamp });
+      console.log('[ControlPanel] Speaking danmaku:', data.text);
+    });
+
+    // 接收停止朗读请求
+    const unsubStop = window.electronAPI?.onStopSpeakDanmaku(() => {
+      ttsService.stop();
+      console.log('[ControlPanel] Stopped speaking');
+    });
+
+    // cleanup: 移除 IPC 监听器 + 停止朗读
+    return () => {
+      unsubSpeak?.();
+      unsubStop?.();
+      ttsService.stop();
+    };
+  }, []);
 
   // 确保初始化时弹幕窗口保持穿透
   useEffect(() => {
@@ -231,6 +263,78 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
   const { settings, updateSettings } = useSettingsStore();
   const { addDanmaku, clearAll, setMaxCount } = useDanmakuStore();
   const { status, sendDanmaku, username } = useConnectionStore();
+
+  // 语音弹幕倒计时
+  useEffect(() => {
+    if (voiceCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setVoiceCooldown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [voiceCooldown > 0]);
+
+  // 发送语音弹幕
+  const handleSendVoiceDanmaku = useCallback(() => {
+    const text = voiceInputText.trim();
+    if (!text || voiceCooldown > 0) return;
+
+    const message: DanmakuMessage = {
+      id: `dm_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      text,
+      userId: ServerConnection.getPersistentUserId() || 'local',
+      color: settings.color,
+      fontSize: settings.fontSize,
+      speed: settings.speed,
+      timestamp: Date.now(),
+      sender: username || '匿名用户',
+      position: settings.defaultPosition,
+      mode: settings.defaultMode,
+      isVoice: true,  // 标记为语音弹幕
+    };
+
+    // 转发到弹幕窗口显示
+    try {
+      if (window.electronAPI?.forwardDanmakuToWindow) {
+        window.electronAPI.forwardDanmakuToWindow({
+          message,
+          fontSize: settings.fontSize,
+          speed: settings.speed,
+          position: settings.defaultPosition,
+          mode: settings.defaultMode,
+          stayDuration: settings.stayDuration
+        });
+      }
+    } catch (error) {
+      console.error('[ControlPanel] Failed to forward voice danmaku:', error);
+    }
+
+    // 如果已连接，发送到服务器
+    if (status === 'connected') {
+      sendDanmaku(message);
+    }
+
+    // TTS 朗读由 DanmakuLayer 检测到弹幕后统一触发，避免重复朗读
+
+    // 开始 60s 倒计时
+    setVoiceCooldown(60);
+    setVoiceInputText('');
+  }, [voiceInputText, voiceCooldown, settings, status, sendDanmaku, username]);
+
+  const handleVoiceKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendVoiceDanmaku();
+      }
+    },
+    [handleSendVoiceDanmaku]
+  );
 
   const handleSendDanmaku = useCallback(() => {
     window.electronAPI?.log('[ControlPanel] handleSendDanmaku called');
@@ -368,9 +472,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
               onKeyDown={handleKeyDown}
               onFocus={() => {
                 window.electronAPI?.setIgnoreMouseEvents(false);
+                // macOS: 降低控制面板层级，让输入法候选框显示在上面
+                if (window.electronAPI?.platform === 'darwin') {
+                  window.electronAPI?.setControlWindowLevel('normal');
+                }
               }}
               onBlur={() => {
                 window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
+                // macOS: 恢复控制面板高层级
+                if (window.electronAPI?.platform === 'darwin') {
+                  window.electronAPI?.setControlWindowLevel('high');
+                }
               }}
               maxLength={100}
               style={{ position: 'relative', zIndex: 10000 }}
@@ -407,6 +519,42 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
               {isContentCollapsed ? '▼' : '▲'}
             </button>
           </div>
+
+          {/* 语音弹幕输入区 - 始终显示 */}
+          {settings.voiceEnabled && (
+            <div className="cp-input-area cp-voice-input-area">
+              <input
+                className="cp-input"
+                type="text"
+                placeholder="🔊 输入语音弹幕..."
+                value={voiceInputText}
+                onChange={(e) => setVoiceInputText(e.target.value)}
+                onKeyDown={handleVoiceKeyDown}
+                onFocus={() => {
+                  window.electronAPI?.setIgnoreMouseEvents(false);
+                  if (window.electronAPI?.platform === 'darwin') {
+                    window.electronAPI?.setControlWindowLevel('normal');
+                  }
+                }}
+                onBlur={() => {
+                  window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
+                  if (window.electronAPI?.platform === 'darwin') {
+                    window.electronAPI?.setControlWindowLevel('high');
+                  }
+                }}
+                maxLength={100}
+                disabled={voiceCooldown > 0}
+                style={{ position: 'relative', zIndex: 10000 }}
+              />
+              <button
+                className="cp-send-btn cp-voice-send-btn"
+                onClick={handleSendVoiceDanmaku}
+                disabled={!voiceInputText.trim() || voiceCooldown > 0}
+              >
+                {voiceCooldown > 0 ? `${voiceCooldown}s` : '🔊'}
+              </button>
+            </div>
+          )}
 
           {/* 折叠时才隐藏的内容 */}
           {!isContentCollapsed && (
@@ -627,6 +775,56 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       </label>
                     </div>
 
+                    {/* 语音弹幕 */}
+                    <div className="cp-section-title">语音弹幕</div>
+                    <div className="cp-control-row">
+                      <label className="cp-switch-label">
+                        <span>语音朗读</span>
+                        <input
+                          type="checkbox"
+                          checked={settings.voiceEnabled}
+                          onChange={(e) => updateSettings({ voiceEnabled: e.target.checked })}
+                        />
+                        <span className="cp-switch-track">
+                          <span className="cp-switch-thumb" />
+                        </span>
+                      </label>
+                    </div>
+                    {settings.voiceEnabled && (
+                      <>
+                        <div className="cp-setting-row">
+                          <label>语速</label>
+                          <div className="cp-slider-group">
+                            <input
+                              type="range"
+                              className="cp-slider"
+                              min="0.5"
+                              max="2"
+                              step="0.1"
+                              value={settings.voiceRate}
+                              onChange={(e) => updateSettings({ voiceRate: Number(e.target.value) })}
+                            />
+                            <span className="cp-value">{settings.voiceRate.toFixed(1)}x</span>
+                          </div>
+                        </div>
+                        <div className="cp-setting-row">
+                          <label>音量</label>
+                          <div className="cp-slider-group">
+                            <input
+                              type="range"
+                              className="cp-slider"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={settings.voiceVolume}
+                              onChange={(e) => updateSettings({ voiceVolume: Number(e.target.value) })}
+                            />
+                            <span className="cp-value">{Math.round(settings.voiceVolume * 100)}%</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
                   </div>
                 )}
                 {activeTab === 'room' && (
@@ -642,7 +840,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 {activeTab === 'about' && (
                   <div className="cp-about">
                     <div className="cp-about-header">
-                      <h3>云弹一下 v1.0.5</h3>
+                      <h3>云弹一下 v1.3.0</h3>
                       <p className="cp-about-author">作者：tth</p>
                     </div>
 
@@ -660,6 +858,35 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
                     <div className="cp-about-section-block">
                       <h4>📋 更新日志</h4>
+
+                      <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.3.0</span>
+                        <p><strong>✨ 新功能</strong></p>
+                        <ul>
+                          <li>语音弹幕：只有语音弹幕会被朗读，普通弹幕不朗读</li>
+                          <li>语音弹幕朗读格式："用户xxx发来语音弹幕：xxx"</li>
+                          <li>语音弹幕文字前显示 🔊🔊🔊 图标标识</li>
+                        </ul>
+                        <p><strong>🐛 修复</strong></p>
+                        <ul>
+                          <li>修复语音弹幕重复朗读的问题</li>
+                          <li>修复 IPC 监听器 cleanup 防止内存泄漏</li>
+                        </ul>
+                      </div>
+
+                      <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.2.0</span>
+                        <p><strong>✨ 新功能</strong></p>
+                        <ul>
+                          <li>语音弹幕：开启后自动朗读收到的弹幕文字</li>
+                          <li>可调节语音语速和音量</li>
+                        </ul>
+                        <p><strong>🐛 修复</strong></p>
+                        <ul>
+                          <li>修复 macOS 输入法候选框在加入房间后被遮挡的问题</li>
+                          <li>修复 macOS 滚动到底部显示不全的问题</li>
+                        </ul>
+                      </div>
 
                       <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.0.5</span>

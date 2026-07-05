@@ -53,6 +53,59 @@ const DanmakuLayer: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // 语音弹幕：检测新弹幕并通过 IPC 转发给控制面板朗读
+  // （弹幕窗口 focusable=false，speechSynthesis 不可用，需在控制面板窗口朗读）
+  const spokenIdsRef = useRef<Set<string>>(new Set());
+  const voiceEnabled = useSettingsStore(state => state.settings.voiceEnabled);
+  const voiceRate = useSettingsStore(state => state.settings.voiceRate);
+  const voiceVolume = useSettingsStore(state => state.settings.voiceVolume);
+
+  // 用 ref 保存最新的语音设置，避免设置变化触发 effect 重新执行导致重复朗读
+  const voiceRateRef = useRef(voiceRate);
+  const voiceVolumeRef = useRef(voiceVolume);
+  voiceRateRef.current = voiceRate;
+  voiceVolumeRef.current = voiceVolume;
+
+  useEffect(() => {
+    if (!voiceEnabled || danmakus.length === 0) {
+      // 诊断日志：记录为什么没有触发语音
+      if (voiceEnabled && danmakus.length === 0) {
+        window.electronAPI?.log(`[DanmakuLayer] voiceEnabled=true but no danmakus`);
+      }
+      return;
+    }
+    window.electronAPI?.log(`[DanmakuLayer] Voice check: voiceEnabled=${voiceEnabled}, danmakus=${danmakus.length}, spokenIds=${spokenIdsRef.current.size}`);
+
+    for (const d of danmakus) {
+      if (!spokenIdsRef.current.has(d.id)) {
+        spokenIdsRef.current.add(d.id);
+        // 只朗读语音弹幕（isVoice=true），普通弹幕不朗读
+        if (d.isVoice) {
+          const speakText = `用户${d.sender || '匿名'}发来语音弹幕：${d.text}`;
+          console.log('[DanmakuLayer] 🗣️ Sending speak IPC for:', speakText.substring(0, 50));
+          window.electronAPI?.log(`[DanmakuLayer] Sending speak IPC: ${speakText.substring(0, 50)}`);
+          window.electronAPI?.speakDanmaku(speakText, { rate: voiceRateRef.current, volume: voiceVolumeRef.current, timestamp: d.startTime });
+        }
+      }
+    }
+
+    // 清理已移除弹幕的 ID（避免内存泄漏）
+    const currentIds = new Set(danmakus.map(d => d.id));
+    for (const id of spokenIdsRef.current) {
+      if (!currentIds.has(id)) {
+        spokenIdsRef.current.delete(id);
+      }
+    }
+  }, [danmakus, voiceEnabled]); // 只依赖 danmakus 和 voiceEnabled，避免语速/音量变化触发重复朗读
+
+  // 语音开关关闭时停止朗读
+  useEffect(() => {
+    if (!voiceEnabled) {
+      window.electronAPI?.stopSpeakDanmaku();
+      spokenIdsRef.current.clear();
+    }
+  }, [voiceEnabled]);
+
   // overlayBounds 变化时更新引擎的 screenWidth
   useEffect(() => {
     const effectiveWidth = window.innerWidth * overlayBounds.width / 100;

@@ -272,6 +272,37 @@ function setupIpcHandlers() {
 
   // setTypingMode 已移除：窗口层级在创建时固定，不再运行时修改，避免 Windows 焦点跳动
 
+  // macOS: 设置控制面板层级（用于输入法候选框显示）
+  ipcMain.on('set-control-window-level', (_event, level: 'normal' | 'high') => {
+    if (process.platform === 'darwin' && controlWindow) {
+      const windowLevel = level === 'high' ? 'screen-saver' : 'normal-window';
+      controlWindow.setAlwaysOnTop(true, windowLevel as any);
+      log(`[Z-ORDER] Control window level changed to: ${windowLevel}`);
+    }
+  });
+
+  // 语音弹幕：弹幕窗口发送朗读请求 -> 转发到控制面板窗口朗读
+  ipcMain.on('speak-danmaku', (_event, text: string, options?: { rate?: number; volume?: number; timestamp?: number }) => {
+    log(`[TTS] Received speak-danmaku IPC: "${text.substring(0, 20)}"`);
+    if (controlWindow && !controlWindow.webContents.isDestroyed()) {
+      controlWindow.webContents.send('speak-danmaku-request', {
+        text,
+        rate: options?.rate ?? 1.0,
+        volume: options?.volume ?? 1.0,
+        timestamp: options?.timestamp ?? Date.now(),
+      });
+      log(`[TTS] ✅ Forwarded speak request to control window: "${text.substring(0, 20)}"`);
+    } else {
+      log(`[TTS] ❌ controlWindow is null or destroyed, cannot forward speak request`);
+    }
+  });
+  ipcMain.on('stop-speak-danmaku', () => {
+    if (controlWindow && !controlWindow.webContents.isDestroyed()) {
+      controlWindow.webContents.send('stop-speak-danmaku-request');
+      log(`[TTS] Forwarded stop-speak request to control window`);
+    }
+  });
+
   // 获取窗口信息
   ipcMain.handle('get-window-bounds', () => {
     return mainWindow?.getBounds();
@@ -360,7 +391,9 @@ app.whenReady().then(() => {
       // 确保弹幕窗口始终保持鼠标穿透
       mainWindow.setIgnoreMouseEvents(true, { forward: true });
     }
-    if (controlWindow && !controlWindow.isDestroyed() && isWindowVisible) {
+    // macOS 不重新断言控制面板层级，因为会覆盖输入框 focus 时设置的 normal-window 层级
+    // 导致输入法候选框被遮挡。macOS 使用 normal-window 层级，不需要 screen-saver 断言。
+    if (process.platform !== 'darwin' && controlWindow && !controlWindow.isDestroyed() && isWindowVisible) {
       if (!controlWindow.isAlwaysOnTop()) {
         controlWindow.setAlwaysOnTop(true, 'screen-saver');
         log(`[Z-ORDER] REASSERT: control alwaysOnTop restored to screen-saver`);

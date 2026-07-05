@@ -141,7 +141,7 @@ const App: React.FC = () => {
       return;
     }
     
-    window.electronAPI.onReceiveDanmakuFromControl((data) => {
+    const unsubscribe = window.electronAPI.onReceiveDanmakuFromControl((data) => {
       window.electronAPI?.log(`[App] Received forwarded danmaku from control window: ${JSON.stringify(data.message.text)}`);
       console.log('[App] Received forwarded danmaku from control window:', data);
       useDanmakuStore.getState().addDanmaku(
@@ -159,6 +159,10 @@ const App: React.FC = () => {
     
     window.electronAPI?.log('[App] ✅ Danmaku forward listener set up complete');
     console.log('[App] ✅ Danmaku forward listener set up complete');
+
+    return () => {
+      unsubscribe?.();
+    };
   }, []);
 
   // 窗口关闭前优雅断开连接
