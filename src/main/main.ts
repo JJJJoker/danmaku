@@ -104,8 +104,13 @@ function createDanmakuWindow() {
       mainWindow.blur();
       // Windows上可能需要额外处理
       if (process.platform === 'win32') {
-        // 确保窗口不被激活
-        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+        // 确保窗口不被激活，延迟执行确保blur生效后再设置
+        setTimeout(() => {
+          if (mainWindow) {
+            mainWindow.setIgnoreMouseEvents(true, { forward: true });
+            log('Danmaku window mouse events reset after blur');
+          }
+        }, 10);
       }
     }
   });
