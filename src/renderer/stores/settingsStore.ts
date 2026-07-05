@@ -22,6 +22,9 @@ const DEFAULT_SETTINGS: DanmakuSettings = {
   defaultPosition: 'top',
   defaultMode: 'scroll',
   stayDuration: 5000,
+  voiceEnabled: false,
+  voiceRate: 1.0,
+  voiceVolume: 1.0,
 };
 
 export const useSettingsStore = create<SettingsState>()(

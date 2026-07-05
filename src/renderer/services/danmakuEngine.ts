@@ -14,6 +14,7 @@ export interface DanmakuTrackItem {
   userId?: string;  // 新增: 发送者唯一ID
   mode: 'scroll' | 'stay';
   position: 'top' | 'middle' | 'bottom';
+  isVoice?: boolean;  // 是否为语音弹幕
 }
 
 // 速度映射（屏幕宽度穿越时间 ms）
@@ -152,6 +153,7 @@ export class DanmakuEngine {
         userId: message.userId,  // 新增: 保存用户ID
         mode,
         position,
+        isVoice: message.isVoice,  // 保存语音弹幕标记
       };
       activeSlots.push(item);
       this.staySlots.set(slotKey, activeSlots);
@@ -205,6 +207,7 @@ export class DanmakuEngine {
       userId: message.userId,  // 新增: 保存用户ID
       mode,
       position,
+      isVoice: message.isVoice,  // 保存语音弹幕标记
     };
 
     // 添加到轨道

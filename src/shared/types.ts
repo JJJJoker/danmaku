@@ -10,6 +10,7 @@ export interface DanmakuMessage {
   sender?: string;
   position?: 'top' | 'middle' | 'bottom';  // 弹幕垂直位置
   mode?: 'scroll' | 'stay';                 // 弹幕模式（滚动/停留）
+  isVoice?: boolean;                        // 是否为语音弹幕
 }
 
 // 房间用户
@@ -72,6 +73,9 @@ export interface DanmakuSettings {
   defaultPosition: 'top' | 'middle' | 'bottom';  // 默认位置
   defaultMode: 'scroll' | 'stay';                  // 默认模式
   stayDuration: number;                            // 停留时长(ms)
+  voiceEnabled: boolean;                           // 语音弹幕开关
+  voiceRate: number;                               // 语速 (0.5-2.0)
+  voiceVolume: number;                             // 音量 (0-1)
 }
 
 // IPC API 类型（与 preload.ts 对应）
@@ -84,8 +88,13 @@ export interface ElectronAPI {
     toggleAlwaysOnTop: () => void;
   };
   resizeControlWindow: (width: number, height: number) => void;
+  setControlWindowLevel: (level: 'normal' | 'high') => void;
+  speakDanmaku: (text: string, options?: { rate?: number; volume?: number; timestamp?: number }) => void;
+  stopSpeakDanmaku: () => void;
+  onSpeakDanmaku: (callback: (data: { text: string; rate: number; volume: number; timestamp: number }) => void) => (() => void);
+  onStopSpeakDanmaku: (callback: () => void) => (() => void);
   forwardDanmakuToWindow: (danmakuData: any) => void;
-  onReceiveDanmakuFromControl: (callback: (danmakuData: any) => void) => void;
+  onReceiveDanmakuFromControl: (callback: (danmakuData: any) => void) => (() => void) | undefined;
   getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number }>;
   log: (message: string) => void;
   getLogPath: () => Promise<string>;
