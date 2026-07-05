@@ -37,7 +37,7 @@ jobs:
         run: npm run build:vite
       
       - name: Build Windows application
-        run: npx electron-builder --win --x64
+        run: npx electron-builder --win --x64 --publish never
       
       - name: Upload Windows exe
         uses: actions/upload-artifact@v4
@@ -81,18 +81,18 @@ jobs:
         run: npm run build:vite
       
       - name: Build macOS application (ARM64)
-        run: npx electron-builder --mac --arm64
+        run: npx electron-builder --mac --arm64 --publish never
       
       - name: Zip macOS app
         run: |
-          cd dist-new/mac
+          cd dist-new/mac-arm64
           zip -r -y "云弹一下.app.zip" "云弹一下.app"
       
       - name: Upload macOS app
         uses: actions/upload-artifact@v4
         with:
           name: macos-app
-          path: dist-new/mac/云弹一下.app.zip
+          path: dist-new/mac-arm64/云弹一下.app.zip
           retention-days: 90
       
       - name: Upload macOS dmg
