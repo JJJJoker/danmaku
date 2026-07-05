@@ -41,13 +41,13 @@
     "productName": "云弹一下",
     "icon": "assets/icon_256.png",
     "npmRebuild": false,
+    "asar": true,
     "directories": {
       "output": "dist-new"
     },
     "files": [
       ".vite/**/*",
       "assets/**/*",
-      "node_modules/**/*",
       "package.json"
     ],
     "extraResources": [
