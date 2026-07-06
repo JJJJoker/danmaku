@@ -4,6 +4,7 @@ import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage, UpdateState, UpdateStatus } from '../../shared/types';
 import { ServerConnection } from '../services/serverConnection';
+import { getDefaultServerUrl, resolveServerUrl } from '../services/serverConfig';
 import { ttsService, speakVoiceDanmaku } from '../services/ttsService';
 import { botService } from '../services/botService';
 import { useBotStore } from '../stores/botStore';
@@ -296,7 +297,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
   const { settings, updateSettings } = useSettingsStore();
   const { addHistory, clearAll, setMaxCount } = useDanmakuStore();
-  const { status, sendDanmaku, username } = useConnectionStore();
+  const { status, sendDanmaku, username, serverUrl, setServerUrl } = useConnectionStore();
   const botRunning = useBotStore(s => s.running);  // 吐槽姬 tab 的运行中绿点
 
   // 语音开关关闭时停止朗读并清空队列
@@ -895,6 +896,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                         </div>
                       </>
                     )}
+
+                    {/* 服务器 */}
+                    <div className="cp-section-title">服务器</div>
+                    <div className="cp-setting-row">
+                      <label>地址</label>
+                      <input
+                        type="text"
+                        className="cp-server-input"
+                        value={serverUrl}
+                        placeholder={getDefaultServerUrl() || 'ws://your-host:8080'}
+                        onChange={(e) => setServerUrl(e.target.value)}
+                      />
+                    </div>
+                    <div className="cp-server-hint">
+                      {resolveServerUrl()
+                        ? `当前生效：${resolveServerUrl()}（改动后重新进入房间生效）`
+                        : '⚠️ 未配置服务器地址，无法联机'}
+                    </div>
 
                   </div>
                 )}

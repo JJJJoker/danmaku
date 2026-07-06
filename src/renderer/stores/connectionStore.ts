@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ServerConnection, ConnectionStatus, PeerRole } from '../services/serverConnection';
+import { getCustomServerUrl, setCustomServerUrl } from '../services/serverConfig';
 import { DanmakuMessage, RoomUser } from '../../shared/types';
 
 // ServerConnection单例（同一时间只连接一个房间，切换房间时重新连接）
@@ -39,6 +40,10 @@ interface ConnectionState {
   rooms: Record<string, RoomState>;
   activeRoomId: string;
   username: string;
+
+  // 自定义服务器地址（空字符串表示使用构建期注入的默认地址）
+  serverUrl: string;
+  setServerUrl: (url: string) => void;
 
   // 新增: 我的房间列表(从localStorage初始化)
   ownedRooms: Array<{
@@ -123,6 +128,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   activeRoomId: '',
   username: localStorage.getItem('funapp-username') || '',
   _onDanmaku: null,
+
+  // 自定义服务器地址（localStorage 持久化，连接时由 serverConfig 解析生效值）
+  serverUrl: getCustomServerUrl(),
+
+  setServerUrl: (url) => {
+    setCustomServerUrl(url);
+    set({ serverUrl: url.trim() });
+  },
 
   // 从localStorage初始化ownedRooms
   ownedRooms: (() => {
