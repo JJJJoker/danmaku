@@ -36,6 +36,7 @@ const HistoryPanel: React.FC = () => {
             <span className="history-sender" style={{ color: item.color }}>
               {item.sender}
             </span>
+            {item.isVoice && <span style={{ marginRight: '4px' }}>🔊🔊🔊</span>}
             <span className="history-content">{item.text}</span>
           </div>
         ))}

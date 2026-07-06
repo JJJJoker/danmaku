@@ -116,6 +116,7 @@ const App: React.FC = () => {
           color: danmaku.color,
           timestamp: danmaku.timestamp,
           roomId,
+          isVoice: danmaku.isVoice,
         });
       }
     });
