@@ -3,7 +3,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage, UpdateState, UpdateStatus } from '../../shared/types';
-import { ServerConnection } from '../services/peerService';
+import { ServerConnection } from '../services/serverConnection';
 import { ttsService, speakVoiceDanmaku } from '../services/ttsService';
 import { botService } from '../services/botService';
 import { useBotStore } from '../stores/botStore';

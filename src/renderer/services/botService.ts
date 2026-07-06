@@ -3,7 +3,7 @@ import { useBotStore, getActivePersona } from '../stores/botStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { useDanmakuStore } from '../stores/danmakuStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { ServerConnection } from './peerService';
+import { ServerConnection } from './serverConnection';
 
 // 吐槽姬服务：只在控制面板窗口运行（App.tsx 按 windowType 过滤）。
 // 三种触发：随机定时 / 关键词（含 @角色名 必触发）/ 房主手动。

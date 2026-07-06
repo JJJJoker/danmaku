@@ -52,7 +52,7 @@ const App: React.FC = () => {
     }, 2000);
   }, []);
 
-  // 初始化 P2P 弹幕接收回调
+  // 初始化网络弹幕接收回调
   useEffect(() => {
     const { initCallbacks } = useConnectionStore.getState();
     initCallbacks((danmaku, roomId, isReplay) => {
