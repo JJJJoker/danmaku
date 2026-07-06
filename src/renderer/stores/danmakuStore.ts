@@ -9,6 +9,7 @@ export interface HistoryItem {
   color: string;
   timestamp: number;
   roomId?: string;
+  isVoice?: boolean;
 }
 
 interface DanmakuState {
@@ -86,6 +87,7 @@ export const useDanmakuStore = create<DanmakuState>((set, get) => ({
       color: message.color,
       timestamp: message.timestamp,
       roomId,
+      isVoice: message.isVoice,
     };
     get().addHistory(historyItem);
 
@@ -121,9 +123,10 @@ export const useDanmakuStore = create<DanmakuState>((set, get) => ({
   },
 
   addHistory: (item) => {
-    set(state => ({
-      history: [...state.history, item].slice(-100),
-    }));
+    // 按 id 去重：本地发送已写入历史后，服务器回显同一条弹幕时不再重复记录
+    set(state => state.history.some(h => h.id === item.id)
+      ? state
+      : { history: [...state.history, item].slice(-100) });
   },
 
   clearHistory: () => {
