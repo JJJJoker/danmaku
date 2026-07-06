@@ -120,7 +120,9 @@ export class DanmakuEngine {
     stayDuration: number = 5000
   ): DanmakuTrackItem {
     const fontSize = message.fontSize || settingsFontSize;
-    const width = estimateTextWidth(message.text, fontSize);
+    // 语音弹幕渲染时会在文字前加 🔊🔊🔊 前缀（含 4px 间距），需计入宽度避免轨道间距判断偏小导致重叠
+    const width = estimateTextWidth((message.isVoice ? '🔊🔊🔊' : '') + message.text, fontSize)
+      + (message.isVoice ? 4 : 0);
 
     // 停留弹幕：分配槽位避免重叠，槽位不够时允许重叠
     if (mode === 'stay') {

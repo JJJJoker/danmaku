@@ -60,3 +60,13 @@ export const useSettingsStore = create<SettingsState>()(
     }
   )
 );
+
+// 多窗口同步：控制面板窗口和弹幕窗口各持有独立的 store 实例，
+// 另一窗口写入 localStorage 时重新水合，保证设置（语音开关、透明度等）实时一致
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'danmaku-settings') {
+      useSettingsStore.persist.rehydrate();
+    }
+  });
+}

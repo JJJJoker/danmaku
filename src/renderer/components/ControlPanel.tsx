@@ -4,7 +4,7 @@ import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage } from '../../shared/types';
 import { ServerConnection } from '../services/peerService';
-import { ttsService } from '../services/ttsService';
+import { ttsService, speakVoiceDanmaku } from '../services/ttsService';
 import RoomPanel from './RoomPanel';
 import HistoryPanel from './HistoryPanel';
 
@@ -150,32 +150,44 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     };
   }, [isDragging, position]);
 
-  // 语音弹幕：监听来自弹幕窗口的朗读请求
+  // 组件卸载时停止朗读
   useEffect(() => {
-    console.log('[ControlPanel] Setting up TTS IPC listeners');
-    console.log('[ControlPanel] ttsService available:', ttsService.isAvailable());
-    console.log('[ControlPanel] window.speechSynthesis available:', !!window.speechSynthesis);
     window.electronAPI?.log(`[ControlPanel] TTS setup: ttsService.available=${ttsService.isAvailable()}, speechSynthesis=${!!window.speechSynthesis}`);
-
-    // 接收朗读请求（发送端已有 60s 倒计时限频，接收端无需再限频）
-    const unsubSpeak = window.electronAPI?.onSpeakDanmaku((data) => {
-      console.log('[ControlPanel] 📨 Received speak IPC:', { text: data.text.substring(0, 30), rate: data.rate, volume: data.volume });
-      window.electronAPI?.log(`[ControlPanel] Received speak IPC: ${data.text.substring(0, 30)}`);
-      ttsService.speak(data.text, { rate: data.rate, volume: data.volume, timestamp: data.timestamp });
-      console.log('[ControlPanel] Speaking danmaku:', data.text);
-    });
-
-    // 接收停止朗读请求
-    const unsubStop = window.electronAPI?.onStopSpeakDanmaku(() => {
-      ttsService.stop();
-      console.log('[ControlPanel] Stopped speaking');
-    });
-
-    // cleanup: 移除 IPC 监听器 + 停止朗读
     return () => {
-      unsubSpeak?.();
-      unsubStop?.();
       ttsService.stop();
+    };
+  }, []);
+
+  // macOS: 任一文本输入框聚焦时降低控制面板层级，让输入法候选框显示在最上层。
+  // 用 document 级监听统一覆盖所有输入框（含 RoomPanel），失焦后恢复置顶
+  useEffect(() => {
+    if (window.electronAPI?.platform !== 'darwin') return;
+
+    const isTextInput = (el: EventTarget | null): boolean => {
+      if (el instanceof HTMLTextAreaElement) return true;
+      if (el instanceof HTMLInputElement) {
+        return ['text', 'password', 'search', 'url', 'tel', 'email', 'number'].includes(el.type);
+      }
+      return el instanceof HTMLElement && el.isContentEditable;
+    };
+
+    const handleFocusIn = (e: FocusEvent) => {
+      if (isTextInput(e.target)) {
+        window.electronAPI?.setControlWindowLevel('normal');
+      }
+    };
+    const handleFocusOut = (e: FocusEvent) => {
+      // 焦点移到另一个文本输入框时保持 normal，避免层级来回抖动
+      if (isTextInput(e.target) && !isTextInput(e.relatedTarget)) {
+        window.electronAPI?.setControlWindowLevel('high');
+      }
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
     };
   }, []);
 
@@ -264,6 +276,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
   const { addDanmaku, clearAll, setMaxCount } = useDanmakuStore();
   const { status, sendDanmaku, username } = useConnectionStore();
 
+  // 语音开关关闭时停止朗读并清空队列
+  useEffect(() => {
+    if (!settings.voiceEnabled) {
+      ttsService.stop();
+    }
+  }, [settings.voiceEnabled]);
+
   // 语音弹幕倒计时
   useEffect(() => {
     if (voiceCooldown <= 0) return;
@@ -319,7 +338,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       sendDanmaku(message);
     }
 
-    // TTS 朗读由 DanmakuLayer 检测到弹幕后统一触发，避免重复朗读
+    // 本窗口直接朗读（speakVoiceDanmaku 按弹幕 ID 去重，网络回环不会重复朗读）
+    speakVoiceDanmaku(message, settings);
 
     // 开始 60s 倒计时
     setVoiceCooldown(60);
@@ -328,7 +348,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
   const handleVoiceKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // isComposing: 输入法组合中的 Enter（选字/上屏）不算发送
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSendVoiceDanmaku();
       }
@@ -395,7 +416,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // isComposing: 输入法组合中的 Enter（选字/上屏）不算发送
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSendDanmaku();
       }
@@ -472,17 +494,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
               onKeyDown={handleKeyDown}
               onFocus={() => {
                 window.electronAPI?.setIgnoreMouseEvents(false);
-                // macOS: 降低控制面板层级，让输入法候选框显示在上面
-                if (window.electronAPI?.platform === 'darwin') {
-                  window.electronAPI?.setControlWindowLevel('normal');
-                }
               }}
               onBlur={() => {
                 window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
-                // macOS: 恢复控制面板高层级
-                if (window.electronAPI?.platform === 'darwin') {
-                  window.electronAPI?.setControlWindowLevel('high');
-                }
               }}
               maxLength={100}
               style={{ position: 'relative', zIndex: 10000 }}
@@ -520,7 +534,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
             </button>
           </div>
 
-          {/* 语音弹幕输入区 - 始终显示 */}
+          {/* 语音弹幕输入区 - 语音开关开启时显示 */}
           {settings.voiceEnabled && (
             <div className="cp-input-area cp-voice-input-area">
               <input
@@ -532,15 +546,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 onKeyDown={handleVoiceKeyDown}
                 onFocus={() => {
                   window.electronAPI?.setIgnoreMouseEvents(false);
-                  if (window.electronAPI?.platform === 'darwin') {
-                    window.electronAPI?.setControlWindowLevel('normal');
-                  }
                 }}
                 onBlur={() => {
                   window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
-                  if (window.electronAPI?.platform === 'darwin') {
-                    window.electronAPI?.setControlWindowLevel('high');
-                  }
                 }}
                 maxLength={100}
                 disabled={voiceCooldown > 0}
@@ -866,6 +874,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                           <li>语音弹幕：只有语音弹幕会被朗读，普通弹幕不朗读</li>
                           <li>语音弹幕朗读格式："用户xxx发来语音弹幕：xxx"</li>
                           <li>语音弹幕文字前显示 🔊🔊🔊 图标标识</li>
+                          <li>可调节语音语速和音量</li>
                         </ul>
                         <p><strong>🐛 修复</strong></p>
                         <ul>
@@ -876,11 +885,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
                       <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.2.0</span>
-                        <p><strong>✨ 新功能</strong></p>
-                        <ul>
-                          <li>语音弹幕：开启后自动朗读收到的弹幕文字</li>
-                          <li>可调节语音语速和音量</li>
-                        </ul>
                         <p><strong>🐛 修复</strong></p>
                         <ul>
                           <li>修复 macOS 输入法候选框在加入房间后被遮挡的问题</li>

@@ -89,12 +89,8 @@ export interface ElectronAPI {
   };
   resizeControlWindow: (width: number, height: number) => void;
   setControlWindowLevel: (level: 'normal' | 'high') => void;
-  speakDanmaku: (text: string, options?: { rate?: number; volume?: number; timestamp?: number }) => void;
-  stopSpeakDanmaku: () => void;
-  onSpeakDanmaku: (callback: (data: { text: string; rate: number; volume: number; timestamp: number }) => void) => (() => void);
-  onStopSpeakDanmaku: (callback: () => void) => (() => void);
   forwardDanmakuToWindow: (danmakuData: any) => void;
-  onReceiveDanmakuFromControl: (callback: (danmakuData: any) => void) => (() => void) | undefined;
+  onReceiveDanmakuFromControl: (callback: (danmakuData: any) => void) => (() => void);
   getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number }>;
   log: (message: string) => void;
   getLogPath: () => Promise<string>;
