@@ -19,22 +19,6 @@ export interface RoomUser {
   username: string;
 }
 
-// 房间信息
-export interface RoomInfo {
-  roomId: string;
-  hostId: string;
-  users: string[];
-  createdAt: number;
-}
-
-// P2P 消息协议
-export type PeerMessage =
-  | { type: 'danmaku'; payload: DanmakuMessage }
-  | { type: 'user-list'; payload: { users: RoomUser[] } }
-  | { type: 'init'; payload: { danmakus: DanmakuMessage[] } }
-  | { type: 'ping'; payload: { timestamp: number } }
-  | { type: 'leave'; payload: { userId: string } };
-
 // 服务器消息协议
 export type ServerMessage =
   | { type: 'danmaku'; payload: DanmakuMessage }
@@ -46,7 +30,7 @@ export type ServerMessage =
   | { type: 'leave'; payload: { userId: string } }
   | { type: 'setPassword'; payload: { roomId: string; password: string; userId: string } }
   | { type: 'deleteRoom'; payload: { roomId: string; userId: string } }
-  | { type: 'joinSuccess'; payload: { roomId: string; userId: string; isHost: boolean } }
+  | { type: 'joinSuccess'; payload: { roomId: string; userId: string; isHost: boolean; password?: string; hasPassword?: boolean } }
   | { type: 'joinError'; payload: { reason: string; message: string } }
   | { type: 'passwordChanged'; payload: { roomId: string; hasPassword: boolean; changedBy: string } }
   | { type: 'roomDeleted'; payload: { roomId: string; reason: string } };
