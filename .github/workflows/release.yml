@@ -43,6 +43,10 @@ jobs:
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: 版本一致性校验（package.json / lock / README / 更新日志）
+        if: steps.check.outputs.should_release == 'true'
+        run: node scripts/bump-version.js --check
+
       - name: 创建 tag（幂等）
         if: steps.check.outputs.should_release == 'true'
         run: |
