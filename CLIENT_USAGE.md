@@ -2,16 +2,14 @@
 
 ## ✅ 当前状态
 
-- **服务器**: ws://REDACTED_SERVER_IP:8080 (已部署并运行)
-- **客户端**: 已集成双模式支持(P2P/服务器)
-- **默认模式**: 服务器模式
+- **服务器**: ws://<你的服务器IP>:8080 (已部署并运行)
+- **客户端**: 通过 WebSocket 服务器中继通信（P2P 模式已于 v1.5.0 移除）
 
 ## 🚀 快速开始
 
 ### 1. 启动应用
 
 ```bash
-cd d:\tools\qoder\qoder_project\yundan
 npm start
 ```
 
@@ -21,7 +19,7 @@ npm start
 2. 点击"创建房间"或"加入房间"
 3. 观察控制台日志,应该看到:
    ```
-   [ServerConnection] Connecting to ws://REDACTED_SERVER_IP:8080...
+   [ServerConnection] Connecting to ws://<你的服务器IP>:8080...
    [ServerConnection] Connected to server
    [ServerConnection] Starting heartbeat (every 5s)
    [ServerConnection] Joined room: danmaku-xxx
@@ -33,37 +31,12 @@ npm start
 2. 点击发送按钮
 3. 在其他客户端(或另一个窗口)应该能看到弹幕显示
 
-## 📊 连接模式切换
-
-### 查看当前模式
-
-在浏览器控制台运行:
-```javascript
-console.log(localStorage.getItem('funapp-connectionMode'))
-```
-
-输出应该是 `"server"` 或 `"p2p"`
-
-### 切换到P2P模式
-
-```javascript
-localStorage.setItem('funapp-connectionMode', 'p2p')
-location.reload()
-```
-
-### 切换到服务器模式
-
-```javascript
-localStorage.setItem('funapp-connectionMode', 'server')
-location.reload()
-```
-
 ## 🧪 测试步骤
 
 ### 测试1: 单客户端连接测试
 
 ```powershell
-.\test-websocket.ps1
+.\test-websocket.ps1 -ServerUrl ws://<你的服务器IP>:8080
 ```
 
 预期输出:
@@ -99,7 +72,7 @@ Connection state: Open
 
 1. 正常连接后,在服务器上重启服务:
    ```bash
-   ssh root@REDACTED_SERVER_IP
+   ssh <用户>@<你的服务器IP>
    pm2 restart danmaku-server
    ```
 
@@ -119,7 +92,7 @@ Connection state: Open
 ### 查看服务器日志
 
 ```bash
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 pm2 logs danmaku-server --lines 50
 ```
 
@@ -137,10 +110,10 @@ pm2 logs danmaku-server
 
 ### 服务器地址
 
-修改 `src/renderer/services/peerService.ts`:
-```typescript
-private SERVER_URL = 'ws://REDACTED_SERVER_IP:8080';
-```
+两种方式（优先级：设置 > 构建默认值）:
+
+1. 在应用「设置」Tab 的「服务器」区块填写地址（如 `ws://<你的服务器IP>:8080`）
+2. 构建时注入默认地址: `VITE_DANMAKU_SERVER_URL=ws://<你的服务器IP>:8080 npm run build:vite`（官方发版由 GitHub 仓库变量 `DANMAKU_SERVER_URL` 注入）
 
 ### 心跳间隔
 
@@ -158,14 +131,14 @@ private SERVER_URL = 'ws://REDACTED_SERVER_IP:8080';
 
 **症状**: 
 ```
-[ServerConnection] Connecting to ws://REDACTED_SERVER_IP:8080...
+[ServerConnection] Connecting to ws://<你的服务器IP>:8080...
 ```
 一直卡住,没有后续日志。
 
 **解决**:
 1. 检查服务器是否运行:
    ```bash
-   ssh root@REDACTED_SERVER_IP
+   ssh <用户>@<你的服务器IP>
    pm2 status danmaku-server
    ```
 
@@ -276,7 +249,6 @@ pm2 monit
 - ✅ 看到实时的在线用户列表
 - ✅ 断线后自动重连
 - ✅ 心跳机制正常工作(每5秒ping/pong)
-- ✅ 平滑切换到P2P模式(如果需要)
 
 ## 📞 技术支持
 
