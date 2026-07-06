@@ -1,9 +1,9 @@
 name: Build
 
+# CI 冒烟构建（不发布）。正式发版走 release.yml：合并到 main 且 package.json 版本号变化时自动发 Release
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -16,26 +16,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-      
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build Vite and compile TypeScript
-        run: npm run build:vite
-      
+
+      - name: Setup and build
+        uses: ./.github/actions/setup-build
+
       - name: Build Windows application
         run: npx electron-builder --win --x64 --publish never
       
@@ -50,7 +34,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-zip
-          path: dist-new/云弹一下-*.zip
+          path: dist-new/yundan-*.zip
+          retention-days: 90
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist-new/yundan-*.exe
           retention-days: 90
 
   build-macos:
@@ -60,26 +51,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-      
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build Vite and compile TypeScript
-        run: npm run build:vite
-      
+
+      - name: Setup and build
+        uses: ./.github/actions/setup-build
+
       - name: Build macOS application (ARM64)
         run: npx electron-builder --mac --arm64 --publish never
       
@@ -99,5 +74,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: dist-new/云弹一下-*.dmg
+          path: dist-new/yundan-*.dmg
           retention-days: 90

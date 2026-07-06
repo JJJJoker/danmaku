@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage } from 'electron';
+import { setupAutoUpdater } from './updater';
 const path = require('path');
 const fs = require('fs');
 
@@ -360,6 +361,7 @@ app.whenReady().then(() => {
   createControlWindow();  // 创建控制面板窗口
   createTray();
   setupIpcHandlers();  // 注册所有 IPC 处理器
+  setupAutoUpdater({ getControlWindow: () => controlWindow, log });  // 自动更新（含 update:* IPC）
 
   // 定期重新断言 z-order（防止截图、全屏应用等打乱层级）
   setInterval(() => {
