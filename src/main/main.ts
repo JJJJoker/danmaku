@@ -55,6 +55,8 @@ let mainWindow: BrowserWindow | null = null;      // 弹幕窗口
 let controlWindow: BrowserWindow | null = null;   // 控制面板窗口
 let tray: Tray | null = null;
 let isWindowVisible = true;
+// 控制面板当前目标层级（macOS 输入框聚焦时降为 normal，让输入法候选框显示在上层）
+let controlWindowLevel: 'screen-saver' | 'normal' = 'screen-saver';
 
 function createDanmakuWindow() {
   // 获取主屏幕尺寸，全屏覆盖
@@ -196,11 +198,11 @@ function createControlWindow() {
   // 不需要鼠标穿透，正常接收事件
   controlWindow.setIgnoreMouseEvents(false);
 
-  // macOS 上使用 normal-window 层级避免遮挡输入法候选框
+  // macOS 上初始使用 normal 层级避免遮挡输入法候选框（输入框失焦后由 IPC 提升为 screen-saver）
   // Windows/Linux 使用 screen-saver 保持在最上层
-  const level = process.platform === 'darwin' ? 'normal-window' : 'screen-saver';
-  controlWindow.setAlwaysOnTop(true, level as any);
-  log(`[Z-ORDER] Control window set to ${level} level (platform: ${process.platform})`);
+  controlWindowLevel = process.platform === 'darwin' ? 'normal' : 'screen-saver';
+  controlWindow.setAlwaysOnTop(true, controlWindowLevel);
+  log(`[Z-ORDER] Control window set to ${controlWindowLevel} level (platform: ${process.platform})`);
 
   // 监听控制面板所有关键事件
   controlWindow.on('focus', () => {
@@ -274,32 +276,10 @@ function setupIpcHandlers() {
 
   // macOS: 设置控制面板层级（用于输入法候选框显示）
   ipcMain.on('set-control-window-level', (_event, level: 'normal' | 'high') => {
-    if (process.platform === 'darwin' && controlWindow) {
-      const windowLevel = level === 'high' ? 'screen-saver' : 'normal-window';
-      controlWindow.setAlwaysOnTop(true, windowLevel as any);
-      log(`[Z-ORDER] Control window level changed to: ${windowLevel}`);
-    }
-  });
-
-  // 语音弹幕：弹幕窗口发送朗读请求 -> 转发到控制面板窗口朗读
-  ipcMain.on('speak-danmaku', (_event, text: string, options?: { rate?: number; volume?: number; timestamp?: number }) => {
-    log(`[TTS] Received speak-danmaku IPC: "${text.substring(0, 20)}"`);
-    if (controlWindow && !controlWindow.webContents.isDestroyed()) {
-      controlWindow.webContents.send('speak-danmaku-request', {
-        text,
-        rate: options?.rate ?? 1.0,
-        volume: options?.volume ?? 1.0,
-        timestamp: options?.timestamp ?? Date.now(),
-      });
-      log(`[TTS] ✅ Forwarded speak request to control window: "${text.substring(0, 20)}"`);
-    } else {
-      log(`[TTS] ❌ controlWindow is null or destroyed, cannot forward speak request`);
-    }
-  });
-  ipcMain.on('stop-speak-danmaku', () => {
-    if (controlWindow && !controlWindow.webContents.isDestroyed()) {
-      controlWindow.webContents.send('stop-speak-danmaku-request');
-      log(`[TTS] Forwarded stop-speak request to control window`);
+    if (process.platform === 'darwin' && controlWindow && !controlWindow.isDestroyed()) {
+      controlWindowLevel = level === 'high' ? 'screen-saver' : 'normal';
+      controlWindow.setAlwaysOnTop(true, controlWindowLevel);
+      log(`[Z-ORDER] Control window level changed to: ${controlWindowLevel}`);
     }
   });
 
@@ -391,12 +371,13 @@ app.whenReady().then(() => {
       // 确保弹幕窗口始终保持鼠标穿透
       mainWindow.setIgnoreMouseEvents(true, { forward: true });
     }
-    // macOS 不重新断言控制面板层级，因为会覆盖输入框 focus 时设置的 normal-window 层级
-    // 导致输入法候选框被遮挡。macOS 使用 normal-window 层级，不需要 screen-saver 断言。
-    if (process.platform !== 'darwin' && controlWindow && !controlWindow.isDestroyed() && isWindowVisible) {
+    // 控制面板层级重断言：macOS 按 controlWindowLevel 记录的目标层级恢复，
+    // 避免覆盖输入框聚焦时设置的 normal 层级导致输入法候选框被遮挡
+    if (controlWindow && !controlWindow.isDestroyed() && isWindowVisible) {
+      const level = process.platform === 'darwin' ? controlWindowLevel : 'screen-saver';
       if (!controlWindow.isAlwaysOnTop()) {
-        controlWindow.setAlwaysOnTop(true, 'screen-saver');
-        log(`[Z-ORDER] REASSERT: control alwaysOnTop restored to screen-saver`);
+        controlWindow.setAlwaysOnTop(true, level);
+        log(`[Z-ORDER] REASSERT: control alwaysOnTop restored to ${level}`);
       }
     }
   }, 5000); // 每5秒检查一次

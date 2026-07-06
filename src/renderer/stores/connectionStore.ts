@@ -88,11 +88,11 @@ interface ConnectionState {
   error: string | null;
   logs: string[];
 
-  // 内部：注册弹幕回调
-  initCallbacks: (onDanmaku: (danmaku: DanmakuMessage, roomId: string) => void) => void;
+  // 内部：注册弹幕回调（isReplay=true 表示房间历史回放，不触发朗读等副作用）
+  initCallbacks: (onDanmaku: (danmaku: DanmakuMessage, roomId: string, isReplay?: boolean) => void) => void;
 
   // 内部：用于存储全局弹幕回调
-  _onDanmaku: ((danmaku: DanmakuMessage, roomId: string) => void) | null;
+  _onDanmaku: ((danmaku: DanmakuMessage, roomId: string, isReplay?: boolean) => void) | null;
   // 内部：为P2P房间设置回调
   _setupRoomCallbacks: (roomId: string, connection: RoomConnection) => void;
   // 内部：为服务器模式设置回调
@@ -769,9 +769,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     const { _onDanmaku } = get();
 
     connection.setCallbacks({
-      onDanmaku: (danmaku) => {
+      onDanmaku: (danmaku, isReplay) => {
         // 弹幕回调始终携带 roomId，由外部决定是否显示
-        _onDanmaku?.(danmaku, roomId);
+        _onDanmaku?.(danmaku, roomId, isReplay);
       },
       onUserListUpdate: (users) => {
         set(state => {
@@ -860,8 +860,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     const { _onDanmaku } = get();
     
     connection.setCallbacks({
-      onDanmaku: (danmaku) => {
-        _onDanmaku?.(danmaku, roomId);
+      onDanmaku: (danmaku, isReplay) => {
+        _onDanmaku?.(danmaku, roomId, isReplay);
       },
       onUserListUpdate: (users) => {
         set(state => {

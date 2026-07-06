@@ -4,9 +4,7 @@ import ControlPanel from './components/ControlPanel';
 import { useConnectionStore } from './stores/connectionStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useDanmakuStore } from './stores/danmakuStore';
-
-// 模块级别标志位，防止弹幕监听器重复注册（React.StrictMode 会导致组件渲染两次）
-let danmakuListenerRegistered = false;
+import { speakVoiceDanmaku } from './services/ttsService';
 
 const App: React.FC = () => {
   // 获取 URL 参数
@@ -56,7 +54,7 @@ const App: React.FC = () => {
   // 初始化 P2P 弹幕接收回调
   useEffect(() => {
     const { initCallbacks } = useConnectionStore.getState();
-    initCallbacks((danmaku, roomId) => {
+    initCallbacks((danmaku, roomId, isReplay) => {
       const { activeRoomId } = useConnectionStore.getState();
       const { settings } = useSettingsStore.getState();
       
@@ -83,9 +81,15 @@ const App: React.FC = () => {
           settings.stayDuration
         );
         
-        // 如果当前是控制面板窗口，转发到弹幕窗口
+        // 语音弹幕：在 TTS 所在窗口（控制面板/兼容单窗口）于接收时直接朗读；
+        // 房间历史回放（init）不朗读，speakVoiceDanmaku 内部按 ID 去重并按发送者限频
         const urlParams = new URLSearchParams(window.location.search);
         const windowType = urlParams.get('window');
+        if (danmaku.isVoice && !isReplay && windowType !== 'danmaku') {
+          speakVoiceDanmaku(danmaku, settings);
+        }
+
+        // 如果当前是控制面板窗口，转发到弹幕窗口
         if (windowType === 'control') {
           console.log('[App] Forwarding remote danmaku to danmaku window via IPC');
           try {
@@ -118,14 +122,8 @@ const App: React.FC = () => {
   }, []);
 
   // 监听来自控制面板的弹幕消息
+  // （effect 返回的 unsubscribe 负责清理，StrictMode 的 mount→cleanup→remount 也能正确重新注册）
   useEffect(() => {
-    // 如果监听器已经注册，跳过
-    if (danmakuListenerRegistered) {
-      console.log('[App] Danmaku listener already registered, skipping');
-      return;
-    }
-    
-    danmakuListenerRegistered = true;
     window.electronAPI?.log('[App] Setting up danmaku forward listener');
     console.log('[App] Setting up danmaku forward listener');
     
