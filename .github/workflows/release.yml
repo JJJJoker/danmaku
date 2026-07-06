@@ -84,6 +84,8 @@ jobs:
 
       - name: Setup and build
         uses: ./.github/actions/setup-build
+        env:
+          VITE_DANMAKU_SERVER_URL: ${{ vars.DANMAKU_SERVER_URL }}
 
       - name: 构建并上传到草稿 Release
         run: npx electron-builder --win --x64 --publish always
@@ -103,6 +105,8 @@ jobs:
 
       - name: Setup and build
         uses: ./.github/actions/setup-build
+        env:
+          VITE_DANMAKU_SERVER_URL: ${{ vars.DANMAKU_SERVER_URL }}
 
       - name: 构建并上传到草稿 Release
         run: npx electron-builder --mac --arm64 --publish always
