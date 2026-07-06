@@ -1044,6 +1044,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       <h4>📋 更新日志</h4>
 
                       <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.5.1</span>
+                        <p><strong>🔧 优化</strong></p>
+                        <ul>
+                          <li>软件更新新增自建服务器下载源，国内下载更快；不可用时自动回退 GitHub，更新更稳定</li>
+                        </ul>
+                      </div>
+
+                      <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.5.0</span>
                         <p><strong>✨ 新功能</strong></p>
                         <ul>

@@ -42,6 +42,8 @@ fi
 # 步骤2: 创建项目目录
 echo -e "\n${GREEN}[Step 2/6] 创建项目目录...${NC}"
 mkdir -p $DEPLOY_DIR
+# 更新资产目录: CI 发版时 rsync 推送客户端安装包与 latest.yml 到这里(见仓库 release.yml)
+mkdir -p $DEPLOY_DIR/updates
 echo -e "${GREEN}✓ 项目目录: $DEPLOY_DIR${NC}"
 
 # 步骤3: 复制项目文件
@@ -60,6 +62,10 @@ cd $DEPLOY_DIR
 npm install --omit=dev
 # 安装TypeScript类型定义(用于可能的重新编译)
 npm install --save-dev @types/ws @types/node typescript
+# rsync: CI 上传更新资产依赖(断点续传)
+if ! command -v rsync &> /dev/null; then
+    apt-get install -y rsync
+fi
 echo -e "${GREEN}✓ 依赖安装完成${NC}"
 
 # 步骤5: 检查是否需要编译TypeScript
@@ -77,8 +83,9 @@ fi
 echo -e "\n${GREEN}[Step 6/6] 配置防火墙...${NC}"
 if command -v ufw &> /dev/null; then
     ufw allow $PORT/tcp
-    ufw allow $PORT/udp
-    echo -e "${GREEN}✓ 防火墙规则已添加: $PORT${NC}"
+    # HTTP 端口(弹幕端口+1): /stats 统计接口 + /updates 客户端更新分发
+    ufw allow $((PORT + 1))/tcp
+    echo -e "${GREEN}✓ 防火墙规则已添加: $PORT, $((PORT + 1))${NC}"
 else
     echo -e "${YELLOW}警告: ufw未安装,请手动配置防火墙${NC}"
 fi
@@ -104,7 +111,8 @@ module.exports = {
     max_memory_restart: '512M',
     env: {
       NODE_ENV: 'production',
-      PORT: $PORT
+      PORT: $PORT,
+      UPDATES_DIR: '$DEPLOY_DIR/updates'
     }
   }]
 };

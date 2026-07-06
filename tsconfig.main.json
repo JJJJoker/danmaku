@@ -6,6 +6,6 @@
     "outDir": ".vite/main",
     "noEmit": false,
   },
-  "include": ["src/main/**/*"],
+  "include": ["src/main/**/*", "forge.env.d.ts"],
   "exclude": ["node_modules"]
 }

@@ -122,14 +122,16 @@ ls dist/
 
 ### 步骤5: 配置防火墙
 
+需要开放两个端口:8080(WebSocket 弹幕中继)和 8081(HTTP:/stats 统计 + /updates 客户端更新分发)。
+
 ```bash
 # 如果使用ufw
 sudo ufw allow 8080/tcp
-sudo ufw allow 8080/udp
+sudo ufw allow 8081/tcp
 
 # 如果使用firewalld(CentOS)
 sudo firewall-cmd --permanent --add-port=8080/tcp
-sudo firewall-cmd --permanent --add-port=8080/udp
+sudo firewall-cmd --permanent --add-port=8081/tcp
 sudo firewall-cmd --reload
 ```
 
@@ -169,7 +171,8 @@ module.exports = {
     max_memory_restart: '512M',
     env: {
       NODE_ENV: 'production',
-      PORT: 8080
+      PORT: 8080,
+      UPDATES_DIR: '/opt/danmaku-server/updates'
     }
   }]
 };
@@ -265,6 +268,71 @@ pm2 restart danmaku-server
 # 6. 验证新版本
 pm2 logs danmaku-server
 ```
+
+---
+
+## 客户端更新分发(/updates)
+
+服务器 8081 端口除 `/stats` 外还提供 `GET /updates/<文件名>` 静态路由,用于分发客户端自动更新资产(比 GitHub Releases 国内下载快)。客户端 electron-updater 以 `http://<服务器IP>:8081/updates` 为 generic 更新源,失败自动回退 GitHub。
+
+### 目录约定
+
+- 资产目录:`/opt/danmaku-server/updates`(可用环境变量 `UPDATES_DIR` 覆盖,ecosystem.config.js 已显式配置)
+- 每个版本 7 个文件:`latest.yml`、`latest-mac.yml`、`yundan-<版本>-win-x64.exe`、`.exe.blockmap`、`yundan-<版本>-win-x64.zip`、`yundan-<版本>-mac-arm64.dmg`、`yundan-<版本>-mac-arm64.zip`
+- CI 发版时自动 rsync 推送(见主仓库 `.github/workflows/release.yml` 的 `upload-update-server` job),并自动清理只保留最近 3 版(约 1.5GB,`df -h` 定期巡检)
+- **保留旧版本不只是备份**:差量更新需要旧版本的 `.blockmap` 在线,删光旧版会让所有客户端退化为全量下载
+
+### GitHub 仓库需要配置的 secrets / vars
+
+| 类型 | 名称 | 内容 |
+|---|---|---|
+| Variable | `DANMAKU_UPDATE_URL` | `http://<服务器IP>:8081/updates`(置空即关闭自建源,客户端纯走 GitHub) |
+| Secret | `UPDATE_SSH_KEY` | 专用 ed25519 私钥(勿复用日常运维私钥) |
+| Secret | `UPDATE_SSH_HOST` | 服务器 IP(放 secret 让 Actions 日志自动打码) |
+| Secret | `UPDATE_SSH_USER` | SSH 用户(当前部署为 root;将来整体收紧权限时改专用用户) |
+| Secret | `UPDATE_SSH_PORT` | 可选,缺省 22 |
+| Secret | `UPDATE_SSH_KNOWN_HOSTS` | 服务器 host key,生成方法见下 |
+
+密钥与 host key 生成(在本地机器执行):
+
+```bash
+# 1. 生成专用部署密钥对
+ssh-keygen -t ed25519 -f danmaku-deploy -N "" -C "danmaku-ci-upload"
+
+# 2. 公钥写入服务器
+ssh-copy-id -i danmaku-deploy.pub root@<服务器IP>
+
+# 3. 私钥内容(danmaku-deploy 文件全文)存入 secret UPDATE_SSH_KEY
+
+# 4. 生成 host key 存入 secret UPDATE_SSH_KNOWN_HOSTS
+ssh-keyscan -p 22 <服务器IP>
+```
+
+### 首次上线回填
+
+配置好后、下一次发版前,`/updates` 目录是空的(客户端请求 404 → 全部走 GitHub 回退,功能无损但验证不了链路)。需要手动把**当前已发布版本**的 7 个资产回填:
+
+```bash
+# 本地下载当前版本资产后上传(或用 gh release download)
+gh release download v<当前版本> --dir assets
+rsync -av assets/ root@<服务器IP>:/opt/danmaku-server/updates/
+
+# 验证
+curl -fsS http://<服务器IP>:8081/updates/latest.yml
+curl -sI -H "Range: bytes=0-0" http://<服务器IP>:8081/updates/yundan-<当前版本>-win-x64.exe | head -1   # 应为 206
+```
+
+### CI 上传失败的手动补传
+
+`upload-update-server` job 失败不影响 GitHub 发版(客户端自动回退)。恢复方式二选一:
+
+1. Actions 页对该次运行点 **"Re-run failed jobs"**(只重跑上传 job;不能整个 workflow 重跑,prepare 会判已发布而跳过)
+2. 手动补传:执行与"首次上线回填"相同的命令,注意**先传二进制、最后传两个 yml**,避免窗口期 yml 指向不存在的文件
+
+### 安全说明(当前已知取舍)
+
+- 更新走纯 HTTP + 裸 IP,链路上存在中间人篡改风险(yml 与安装包可被整体替换;Windows 包未签名)。**升级路径**:注册域名 → nginx/Caddy 挂 Let's Encrypt 反代 8081 → 仅把仓库变量 `DANMAKU_UPDATE_URL` 改为 https 域名,客户端与 CI 零代码改动
+- GitHub Releases 始终双发布,是权威源与回退源
 
 ---
 

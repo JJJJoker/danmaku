@@ -3,6 +3,7 @@ import { IncomingMessage } from 'http';
 import { createServer } from 'http';
 import { Room } from './room';
 import { ServerMessage } from './types';
+import { isUpdatesRequest, serveUpdateFile } from './updates-static';
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 
@@ -426,7 +427,19 @@ class DanmakuServer {
         res.end();
         return;
       }
-      
+
+      // 客户端自动更新资产分发（/updates/<file>），逻辑独立在 updates-static.ts
+      let pathname = '';
+      try {
+        pathname = new URL(req.url ?? '', 'http://localhost').pathname;
+      } catch {
+        // 畸形 URL 交给下面的 404 分支
+      }
+      if (isUpdatesRequest(pathname)) {
+        void serveUpdateFile(req, res, pathname);
+        return;
+      }
+
       if (req.url === '/stats') {
         // 构建房主统计信息
         const hostStats: Record<string, { roomCount: number; rooms: string[] }> = {};
