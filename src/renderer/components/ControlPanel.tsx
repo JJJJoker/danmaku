@@ -5,8 +5,11 @@ import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage, UpdateState, UpdateStatus } from '../../shared/types';
 import { ServerConnection } from '../services/peerService';
 import { ttsService, speakVoiceDanmaku } from '../services/ttsService';
+import { botService } from '../services/botService';
+import { useBotStore } from '../stores/botStore';
 import RoomPanel from './RoomPanel';
 import HistoryPanel from './HistoryPanel';
+import BotPanel from './BotPanel';
 
 const PRESET_COLORS = [
   { name: '白', value: '#ffffff' },
@@ -95,7 +98,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isContentCollapsed, setIsContentCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'settings' | 'room' | 'history' | 'about'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'room' | 'history' | 'bot' | 'about'>('settings');
   const [inputText, setInputText] = useState('');
   const [customColor, setCustomColor] = useState('');
   const [voiceInputText, setVoiceInputText] = useState('');
@@ -294,6 +297,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
   const { settings, updateSettings } = useSettingsStore();
   const { addHistory, clearAll, setMaxCount } = useDanmakuStore();
   const { status, sendDanmaku, username } = useConnectionStore();
+  const botRunning = useBotStore(s => s.running);  // 吐槽姬 tab 的运行中绿点
 
   // 语音开关关闭时停止朗读并清空队列
   useEffect(() => {
@@ -371,6 +375,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
     // 本窗口直接朗读（speakVoiceDanmaku 按弹幕 ID 去重，网络回环不会重复朗读）
     speakVoiceDanmaku(message, settings);
+
+    // 房主自己的弹幕不经过网络接收回调，这里喂给吐槽姬做关键词匹配
+    botService.onLocalDanmaku(message);
 
     // 开始 60s 倒计时
     setVoiceCooldown(60);
@@ -453,6 +460,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       console.log('[ControlPanel] Sending via connection');
       sendDanmaku(message);
     }
+
+    // 房主自己的弹幕不经过网络接收回调，这里喂给吐槽姬做关键词匹配
+    botService.onLocalDanmaku(message);
 
     setInputText('');
   }, [inputText, settings, status, sendDanmaku, addHistory, username]);
@@ -630,6 +640,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                     onClick={() => setActiveTab('history')}
                   >
                     历史
+                  </button>
+                  <button
+                    className={`cp-tab ${activeTab === 'bot' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('bot')}
+                  >
+                    吐槽姬
+                    {botRunning && <span className="cp-tab-badge cp-tab-badge-bot" />}
                   </button>
                   <button
                     className={`cp-tab ${activeTab === 'about' ? 'active' : ''}`}
@@ -889,6 +906,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 {activeTab === 'history' && (
                   <div className="cp-history">
                     <HistoryPanel />
+                  </div>
+                )}
+                {activeTab === 'bot' && (
+                  <div className="cp-bot">
+                    <BotPanel />
                   </div>
                 )}
                 {activeTab === 'about' && (

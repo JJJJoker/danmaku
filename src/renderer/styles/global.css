@@ -1595,3 +1595,228 @@ html, body {
   background: linear-gradient(135deg, #5b7fff, #8b5cf6);
   transition: width 0.2s;
 }
+/* ========== 吐槽姬面板（cp-bot-*） ========== */
+
+.cp-bot-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* 状态行：pill + 启停/手动触发按钮 */
+.cp-bot-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cp-bot-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cp-bot-running {
+  background: rgba(80, 200, 120, 0.2);
+  color: #7edd9a;
+  border: 1px solid rgba(80, 200, 120, 0.3);
+}
+
+.cp-bot-stopped {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cp-bot-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cp-bot-dot-on {
+  background: #4caf50;
+  box-shadow: 0 0 4px #4caf50;
+  animation: cp-bot-pulse 1.6s ease-in-out infinite;
+}
+
+.cp-bot-dot-off {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@keyframes cp-bot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* 吐槽姬 tab 的运行中绿点（覆盖 .cp-tab-badge 的红色） */
+.cp-tab-badge-bot {
+  background: #4caf50;
+  box-shadow: 0 0 4px #4caf50;
+}
+
+/* 提示 / 错误 / 成功 消息行 */
+.cp-bot-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.5;
+}
+
+.cp-bot-error {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255, 68, 68, 0.12);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: #ff8a8a;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.cp-bot-notice {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(80, 200, 120, 0.12);
+  border: 1px solid rgba(80, 200, 120, 0.3);
+  color: #7edd9a;
+  font-size: 11px;
+}
+
+/* 表单字段 */
+.cp-bot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cp-bot-field > label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cp-bot-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cp-bot-key-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cp-bot-key-row .rp-join-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cp-bot-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.cp-bot-textarea:focus {
+  border-color: #5b7fff;
+}
+
+.cp-bot-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cp-bot-btn-spinner {
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+}
+
+/* 人设标签 chips */
+.cp-bot-persona-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cp-bot-persona-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.cp-bot-persona-tag:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.cp-bot-persona-tag.active {
+  background: rgba(91, 127, 255, 0.25);
+  border-color: rgba(91, 127, 255, 0.5);
+  color: #8baeff;
+}
+
+.cp-bot-tag-del {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  cursor: pointer;
+}
+
+.cp-bot-tag-del:hover {
+  color: #ff6b6b;
+}
+
+/* 弹幕外观：颜色色板 / 分段按钮 */
+.cp-bot-colors {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cp-bot-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.cp-bot-color.active {
+  border-color: #fff;
+  transform: scale(1.15);
+}
+
+.cp-bot-seg {
+  display: flex;
+  gap: 4px;
+}
