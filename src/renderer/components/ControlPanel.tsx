@@ -273,7 +273,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
   }, []);
 
   const { settings, updateSettings } = useSettingsStore();
-  const { addDanmaku, clearAll, setMaxCount } = useDanmakuStore();
+  const { addHistory, clearAll, setMaxCount } = useDanmakuStore();
   const { status, sendDanmaku, username } = useConnectionStore();
 
   // 语音开关关闭时停止朗读并清空队列
@@ -317,6 +317,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       isVoice: true,  // 标记为语音弹幕
     };
 
+    // 本地写入历史（addHistory 按 id 去重，服务器回显不会重复记录）
+    const { activeRoomId } = useConnectionStore.getState();
+    addHistory({
+      id: message.id,
+      text: message.text,
+      sender: message.sender || '匿名用户',
+      color: message.color,
+      timestamp: message.timestamp,
+      roomId: status === 'connected' && activeRoomId ? activeRoomId : undefined,
+      isVoice: message.isVoice,
+    });
+
     // 转发到弹幕窗口显示
     try {
       if (window.electronAPI?.forwardDanmakuToWindow) {
@@ -344,7 +356,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     // 开始 60s 倒计时
     setVoiceCooldown(60);
     setVoiceInputText('');
-  }, [voiceInputText, voiceCooldown, settings, status, sendDanmaku, username]);
+  }, [voiceInputText, voiceCooldown, settings, status, sendDanmaku, addHistory, username]);
 
   const handleVoiceKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -389,6 +401,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
     console.log('[ControlPanel] Danmaku message:', message);
 
+    // 本地写入历史（addHistory 按 id 去重，服务器回显不会重复记录）
+    const { activeRoomId } = useConnectionStore.getState();
+    addHistory({
+      id: message.id,
+      text: message.text,
+      sender: message.sender || '匿名用户',
+      color: message.color,
+      timestamp: message.timestamp,
+      roomId: status === 'connected' && activeRoomId ? activeRoomId : undefined,
+      isVoice: message.isVoice,
+    });
+
     // 始终转发到弹幕窗口（发送者自己也需要看到弹幕）
     try {
       if (window.electronAPI?.forwardDanmakuToWindow) {
@@ -412,7 +436,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     }
 
     setInputText('');
-  }, [inputText, settings, status, sendDanmaku, addDanmaku, username]);
+  }, [inputText, settings, status, sendDanmaku, addHistory, username]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
