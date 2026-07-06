@@ -21,6 +21,16 @@ runs:
       run: npm ci
       shell: bash
 
+    - name: 移除 .npmrc 国内镜像（CI 直连官方源）
+      # npmmirror 的 electron-builder-binaries 代理会返回坏内容（NSIS 包 sha512 校验失败）。
+      # 环境变量覆盖在 Windows 上不可靠：npm 会把 .npmrc 注入成小写 npm_config_* 环境变量，
+      # 与大写覆盖变量在 Windows 大小写不敏感的环境里冲突。故直接删掉项目 .npmrc 里的镜像配置
+      # （npm ci 已完成，不影响装依赖；只影响本次 CI，本地开发仍走镜像）。
+      run: |
+        npm config --location=project delete electron_mirror
+        npm config --location=project delete electron_builder_binaries_mirror
+      shell: bash
+
     - name: Build Vite and compile TypeScript
       run: npm run build:vite
       shell: bash
