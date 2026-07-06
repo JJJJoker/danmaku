@@ -13,7 +13,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # 配置变量
-SERVER_IP="116.62.47.225"
+# 你的服务器 IP（可用环境变量 SERVER_IP 覆盖）
+SERVER_IP="${SERVER_IP:-YOUR_SERVER_IP}"
 DEPLOY_DIR="/opt/danmaku-server"
 PORT=8080
 

@@ -1,12 +1,16 @@
 # 测试WebSocket服务器连接
+# 用法: .\test-websocket.ps1 -ServerUrl ws://<你的服务器IP>:8080
+param(
+    [string]$ServerUrl = "ws://YOUR_SERVER_IP:8080"
+)
 
-Write-Host "Testing WebSocket connection to server..." -ForegroundColor Cyan
+Write-Host "Testing WebSocket connection to $ServerUrl ..." -ForegroundColor Cyan
 Write-Host ""
 
 try {
     $ws = New-Object System.Net.WebSockets.ClientWebSocket
     $ct = New-Object System.Threading.CancellationToken
-    $task = $ws.ConnectAsync("ws://116.62.47.225:8080", $ct)
+    $task = $ws.ConnectAsync($ServerUrl, $ct)
     $task.Wait()
     
     Write-Host "Connection state: $($ws.State)" -ForegroundColor Green

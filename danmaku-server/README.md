@@ -42,7 +42,7 @@ npm run dev
 
 1. SSH登录到服务器:
 ```bash
-ssh root@116.62.47.225
+ssh <用户>@<你的服务器IP>
 ```
 
 2. 安装Node.js:
@@ -263,7 +263,7 @@ ws.onmessage = (event) => {
 ```powershell
 # PowerShell测试连接
 $ws = New-Object System.Net.WebSockets.ClientWebSocket
-$ws.ConnectAsync("ws://116.62.47.225:8080", [Threading.CancellationToken]::None).Wait()
+$ws.ConnectAsync("ws://<你的服务器IP>:8080", [Threading.CancellationToken]::None).Wait()
 ```
 
 ## 监控与维护

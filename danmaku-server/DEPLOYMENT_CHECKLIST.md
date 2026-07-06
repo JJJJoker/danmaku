@@ -5,7 +5,7 @@
 - [ ] 本地代码已编译 (`npm run build`)
 - [ ] dist目录包含 server.js, room.js, types.js
 - [ ] 压缩包已生成 (danmaku-server.zip)
-- [ ] SSH可以连接到服务器 (ssh root@116.62.47.225)
+- [ ] SSH可以连接到服务器 (ssh <用户>@<你的服务器IP>)
 
 ---
 
@@ -28,10 +28,10 @@ cd d:\tools\qoder\qoder_project\yundan\danmaku-server
 
 ```powershell
 # 1. 创建远程目录
-ssh root@116.62.47.225 "mkdir -p /opt/danmaku-server"
+ssh <用户>@<你的服务器IP> "mkdir -p /opt/danmaku-server"
 
 # 2. 上传压缩包
-scp danmaku-server.zip root@116.62.47.225:/opt/danmaku-server/
+scp danmaku-server.zip <用户>@<你的服务器IP>:/opt/danmaku-server/
 ```
 
 ---
@@ -88,7 +88,7 @@ chmod +x deploy.sh
   部署完成!
 ========================================
 
-服务器地址: ws://116.62.47.225:8080
+服务器地址: ws://<你的服务器IP>:8080
 服务状态: online
 ```
 
@@ -209,7 +209,7 @@ npm start
 
 **期望日志**:
 ```
-[ServerConnection] Connecting to ws://116.62.47.225:8080...
+[ServerConnection] Connecting to ws://<你的服务器IP>:8080...
 [ServerConnection] Connected to server
 [ServerConnection] Starting heartbeat (every 5s)
 [ServerConnection] Sent join message
@@ -293,7 +293,7 @@ pm2 restart danmaku-server
 
 **从本地测试网络连通性**:
 ```powershell
-telnet 116.62.47.225 8080
+telnet <你的服务器IP> 8080
 ```
 
 如果连接失败:
@@ -394,7 +394,7 @@ tar czf danmaku-server-backup-$(date +%Y%m%d).tar.gz danmaku-server/
 
 下载到本地:
 ```powershell
-scp root@116.62.47.225:/opt/danmaku-server-backup-20260705.tar.gz .
+scp <用户>@<你的服务器IP>:/opt/danmaku-server-backup-20260705.tar.gz .
 ```
 
 ### 恢复

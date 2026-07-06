@@ -17,7 +17,7 @@
 
 ```powershell
 cd d:\tools\qoder\qoder_project\yundan\danmaku-server
-scp danmaku-server.zip root@116.62.47.225:/opt/danmaku-server/
+scp danmaku-server.zip <用户>@<你的服务器IP>:/opt/danmaku-server/
 ```
 
 **提示**: 输入服务器root用户的密码
@@ -25,7 +25,7 @@ scp danmaku-server.zip root@116.62.47.225:/opt/danmaku-server/
 ### 步骤2: SSH登录服务器
 
 ```bash
-ssh root@116.62.47.225
+ssh <用户>@<你的服务器IP>
 ```
 
 ### 步骤3: 在服务器上解压和部署
@@ -85,8 +85,8 @@ curl http://localhost:8081/stats
 **错误**: `Permission denied` 或 `Connection timed out`
 
 **解决**:
-1. 确认服务器IP正确: 116.62.47.225
-2. 确认SSH服务运行: `ssh root@116.62.47.225`
+1. 确认服务器IP正确: <你的服务器IP>
+2. 确认SSH服务运行: `ssh <用户>@<你的服务器IP>`
 3. 检查防火墙是否允许SSH(端口22)
 
 ### 问题2: unzip命令不存在
@@ -168,7 +168,7 @@ curl http://localhost:8081/stats
 如果服务器开放了8081端口,可以从浏览器访问:
 
 ```
-http://116.62.47.225:8081/stats
+http://<你的服务器IP>:8081/stats
 ```
 
 ---

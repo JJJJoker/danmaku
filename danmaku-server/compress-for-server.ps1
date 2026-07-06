@@ -29,4 +29,4 @@ Remove-Item -Recurse -Force temp-upload
 Write-Host "✓ 服务器代码已压缩到 danmaku-server.zip" -ForegroundColor Green
 Write-Host ""
 Write-Host "下一步: 上传到服务器" -ForegroundColor Yellow
-Write-Host "scp danmaku-server.zip root@116.62.47.225:/opt/danmaku-server/" -ForegroundColor Gray
+Write-Host "scp danmaku-server.zip root@YOUR_SERVER_IP:/opt/danmaku-server/" -ForegroundColor Gray
