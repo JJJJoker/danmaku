@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useConnectionStore } from '../stores/connectionStore';
-import { ServerConnection } from '../services/peerService';
+import { ServerConnection } from '../services/serverConnection';
 
 interface RoomHistoryItem {
   roomId: string;
@@ -80,8 +80,7 @@ const RoomPanel: React.FC = () => {
     disconnectRoom,
     switchRoom,
     clearError,
-    testConnection,
-    testServerConnection,  // 新增: 测试服务器连接
+    testServerConnection,  // 测试服务器连接
     clearLogs,
     setUsername,
     setPassword,  // 新增

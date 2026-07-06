@@ -4,7 +4,7 @@ If the automated upload script fails, you can manually upload the server files u
 
 ## Prerequisites
 
-- SSH access to your server (REDACTED_SERVER_IP)
+- SSH access to your server (<你的服务器IP>)
 - SCP or SFTP client installed
 
 ---
@@ -14,7 +14,7 @@ If the automated upload script fails, you can manually upload the server files u
 ### Step 1: Create Remote Directory
 
 ```bash
-ssh root@REDACTED_SERVER_IP "mkdir -p /opt/danmaku-server"
+ssh <用户>@<你的服务器IP> "mkdir -p /opt/danmaku-server"
 ```
 
 ### Step 2: Compress Files
@@ -42,13 +42,13 @@ Remove-Item -Recurse -Force temp-upload
 ### Step 3: Upload
 
 ```bash
-scp danmaku-server.zip root@REDACTED_SERVER_IP:/opt/danmaku-server/
+scp danmaku-server.zip <用户>@<你的服务器IP>:/opt/danmaku-server/
 ```
 
 ### Step 4: Deploy on Server
 
 ```bash
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 
 cd /opt/danmaku-server
 unzip danmaku-server.zip
@@ -63,7 +63,7 @@ chmod +x deploy.sh
 ### Step 1: Start SFTP Session
 
 ```bash
-sftp root@REDACTED_SERVER_IP
+sftp <用户>@<你的服务器IP>
 ```
 
 ### Step 2: Navigate and Create Directory
@@ -94,7 +94,7 @@ sftp> exit
 
 Then SSH to deploy:
 ```bash
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 cd /opt/danmaku-server
 npm install --production
 npm run build
@@ -112,7 +112,7 @@ pm2 startup
 
 1. Open FileZilla
 2. Enter connection details:
-   - Host: `REDACTED_SERVER_IP`
+   - Host: `<你的服务器IP>`
    - Username: `root`
    - Password: (your server password)
    - Port: `22`
@@ -136,7 +136,7 @@ Upload these files from local `danmaku-server/` directory:
 ### Step 4: Deploy via SSH
 
 ```bash
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 cd /opt/danmaku-server
 chmod +x deploy.sh
 ./deploy.sh
@@ -149,7 +149,7 @@ chmod +x deploy.sh
 ### Initial Setup on Server
 
 ```bash
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 
 # Install git if not present
 apt-get install -y git
@@ -231,7 +231,7 @@ Expected output:
 **Solution**:
 - Verify your SSH password is correct
 - Check if SSH keys are configured properly
-- Try: `ssh -v root@REDACTED_SERVER_IP` for verbose output
+- Try: `ssh -v <用户>@<你的服务器IP>` for verbose output
 
 ### Problem 2: Directory Not Found
 
@@ -240,7 +240,7 @@ Expected output:
 **Solution**:
 ```bash
 # Manually create directory
-ssh root@REDACTED_SERVER_IP "mkdir -p /opt/danmaku-server"
+ssh <用户>@<你的服务器IP> "mkdir -p /opt/danmaku-server"
 
 # Set permissions
 chown root:root /opt/danmaku-server
@@ -255,7 +255,7 @@ chmod 755 /opt/danmaku-server
 - Consider using rsync for incremental updates:
   ```bash
   rsync -avz --exclude 'node_modules' --exclude 'dist' \
-    ./danmaku-server/ root@REDACTED_SERVER_IP:/opt/danmaku-server/
+    ./danmaku-server/ <用户>@<你的服务器IP>:/opt/danmaku-server/
   ```
 
 ### Problem 4: npm Install Fails
@@ -291,7 +291,7 @@ npm install --production
 After successful deployment:
 
 1. **Test Remote Connection**:
-   - Modify client `SERVER_URL` to `ws://REDACTED_SERVER_IP:8080`
+   - Modify client `SERVER_URL` to `ws://<你的服务器IP>:8080`
    - Run client application
    - Verify WebSocket connection
 

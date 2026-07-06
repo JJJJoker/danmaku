@@ -2,7 +2,8 @@
 # 弹幕服务器自动化部署脚本 (Windows)
 # ================================
 
-$SERVER_IP = "REDACTED_SERVER_IP"
+# 你的服务器 IP（可用环境变量 DANMAKU_SERVER_IP 覆盖）
+$SERVER_IP = if ($env:DANMAKU_SERVER_IP) { $env:DANMAKU_SERVER_IP } else { "YOUR_SERVER_IP" }
 $SERVER_USER = "root"
 $DEPLOY_DIR = "/opt/danmaku-server"
 $LOCAL_DIR = "."

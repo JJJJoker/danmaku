@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage } from 'electron';
 import { setupAutoUpdater } from './updater';
+import { setupLLM } from './llm';
 const path = require('path');
 const fs = require('fs');
 
@@ -362,6 +363,7 @@ app.whenReady().then(() => {
   createTray();
   setupIpcHandlers();  // 注册所有 IPC 处理器
   setupAutoUpdater({ getControlWindow: () => controlWindow, log });  // 自动更新（含 update:* IPC）
+  setupLLM({ log });  // 吐槽姬 LLM 调用代理（llm:chat IPC）
 
   // 定期重新断言 z-order（防止截图、全屏应用等打乱层级）
   setInterval(() => {

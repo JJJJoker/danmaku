@@ -17,7 +17,7 @@
 
 ```powershell
 cd d:\tools\qoder\qoder_project\yundan\danmaku-server
-scp danmaku-server.zip root@REDACTED_SERVER_IP:/opt/danmaku-server/
+scp danmaku-server.zip <用户>@<你的服务器IP>:/opt/danmaku-server/
 ```
 
 **提示**: 输入服务器root用户的密码
@@ -25,7 +25,7 @@ scp danmaku-server.zip root@REDACTED_SERVER_IP:/opt/danmaku-server/
 ### 2. SSH登录服务器
 
 ```bash
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 ```
 
 ### 3. 在服务器上解压和部署

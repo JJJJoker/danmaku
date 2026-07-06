@@ -1,5 +1,7 @@
 # 客户端集成指南
 
+> ⚠️ **历史文档**：本文写于服务器模式集成初期，文中提到的 P2P 架构（`RoomConnection`/PeerJS/双模式切换）已于 v1.5.0 彻底移除，客户端现仅支持 WebSocket 服务器中继（`src/renderer/services/serverConnection.ts`）。本文仅作设计背景参考。
+
 如何将WebSocket服务器连接集成到现有客户端代码中。
 
 ---
@@ -18,7 +20,7 @@
 
 ## 新架构: 客户端-服务器模式
 
-新增`ServerConnection`类,通过WebSocket连接到你的云服务器(REDACTED_SERVER_IP:8080)。
+新增`ServerConnection`类,通过WebSocket连接到你的云服务器(<你的服务器IP>:8080)。
 
 ### 优势
 - ✅ 中心化控制,更稳定
@@ -221,7 +223,7 @@ serverConn.setCallbacks({
 
 编辑 `src/renderer/services/peerService.ts`:
 ```typescript
-private SERVER_URL = 'ws://REDACTED_SERVER_IP:8080';
+private SERVER_URL = 'ws://<你的服务器IP>:8080';
 ```
 
 如果服务器地址变更,只需修改这一行。
@@ -279,13 +281,13 @@ private SERVER_URL = 'wss://yourdomain.com:8080';
 
 1. **确保服务器已部署**:
    ```bash
-   ssh root@REDACTED_SERVER_IP
+   ssh <用户>@<你的服务器IP>
    pm2 status danmaku-server
    ```
 
 2. **修改客户端配置**:
    ```typescript
-   private SERVER_URL = 'ws://REDACTED_SERVER_IP:8080';
+   private SERVER_URL = 'ws://<你的服务器IP>:8080';
    ```
 
 3. **从另一个客户端连接并测试**

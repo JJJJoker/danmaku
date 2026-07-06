@@ -17,7 +17,7 @@
 1. **修改上传脚本配置**:
    编辑 `upload-to-server.ps1`,确认以下信息正确:
    ```powershell
-   $SERVER_IP = "REDACTED_SERVER_IP"
+   $SERVER_IP = "<你的服务器IP>"
    $SERVER_USER = "root"
    ```
 
@@ -29,7 +29,7 @@
 
 3. **SSH登录服务器并执行部署**:
    ```bash
-   ssh root@REDACTED_SERVER_IP
+   ssh <用户>@<你的服务器IP>
    cd /opt/danmaku-server
    unzip danmaku-server.zip
    chmod +x deploy.sh
@@ -42,12 +42,12 @@
    ```bash
    cd danmaku-server
    tar -czf danmaku-server.tar.gz package.json tsconfig.json README.md deploy.sh src/
-   scp danmaku-server.tar.gz root@REDACTED_SERVER_IP:/opt/danmaku-server/
+   scp danmaku-server.tar.gz <用户>@<你的服务器IP>:/opt/danmaku-server/
    ```
 
 2. **SSH登录并部署**:
    ```bash
-   ssh root@REDACTED_SERVER_IP
+   ssh <用户>@<你的服务器IP>
    cd /opt/danmaku-server
    tar -xzf danmaku-server.tar.gz
    chmod +x deploy.sh
@@ -62,7 +62,7 @@
 
 ```bash
 # SSH登录服务器
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 
 # 添加Node.js 20.x源
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -101,7 +101,7 @@ git commit -m "Initial commit"
 **方式C: 直接复制**
 ```bash
 # 在本地使用scp命令
-scp -r danmaku-server/* root@REDACTED_SERVER_IP:/opt/danmaku-server/
+scp -r danmaku-server/* <用户>@<你的服务器IP>:/opt/danmaku-server/
 ```
 
 ### 步骤4: 安装依赖并编译
@@ -251,7 +251,7 @@ pm2 flush
 ```bash
 # 1. 上传新代码到服务器
 # 2. SSH登录服务器
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 
 # 3. 进入项目目录
 cd /opt/danmaku-server
@@ -454,17 +454,17 @@ pm2 monit
 tar -czf danmaku-backup-$(date +%Y%m%d).tar.gz /opt/danmaku-server/
 
 # 下载到本地
-scp root@REDACTED_SERVER_IP:/opt/danmaku-backup-*.tar.gz .
+scp <用户>@<你的服务器IP>:/opt/danmaku-backup-*.tar.gz .
 ```
 
 ### 恢复数据
 
 ```bash
 # 上传备份
-scp danmaku-backup-*.tar.gz root@REDACTED_SERVER_IP:/tmp/
+scp danmaku-backup-*.tar.gz <用户>@<你的服务器IP>:/tmp/
 
 # 解压恢复
-ssh root@REDACTED_SERVER_IP
+ssh <用户>@<你的服务器IP>
 tar -xzf /tmp/danmaku-backup-*.tar.gz -C /opt/
 pm2 restart danmaku-server
 ```

@@ -19,22 +19,6 @@ export interface RoomUser {
   username: string;
 }
 
-// 房间信息
-export interface RoomInfo {
-  roomId: string;
-  hostId: string;
-  users: string[];
-  createdAt: number;
-}
-
-// P2P 消息协议
-export type PeerMessage =
-  | { type: 'danmaku'; payload: DanmakuMessage }
-  | { type: 'user-list'; payload: { users: RoomUser[] } }
-  | { type: 'init'; payload: { danmakus: DanmakuMessage[] } }
-  | { type: 'ping'; payload: { timestamp: number } }
-  | { type: 'leave'; payload: { userId: string } };
-
 // 服务器消息协议
 export type ServerMessage =
   | { type: 'danmaku'; payload: DanmakuMessage }
@@ -46,7 +30,7 @@ export type ServerMessage =
   | { type: 'leave'; payload: { userId: string } }
   | { type: 'setPassword'; payload: { roomId: string; password: string; userId: string } }
   | { type: 'deleteRoom'; payload: { roomId: string; userId: string } }
-  | { type: 'joinSuccess'; payload: { roomId: string; userId: string; isHost: boolean } }
+  | { type: 'joinSuccess'; payload: { roomId: string; userId: string; isHost: boolean; password?: string; hasPassword?: boolean } }
   | { type: 'joinError'; payload: { reason: string; message: string } }
   | { type: 'passwordChanged'; payload: { roomId: string; hasPassword: boolean; changedBy: string } }
   | { type: 'roomDeleted'; payload: { roomId: string; reason: string } };
@@ -105,6 +89,23 @@ export interface UpdateState {
   status: UpdateStatus | null;
 }
 
+// ========== 吐槽姬 LLM 调用（主进程代理，OpenAI 兼容接口） ==========
+
+// llm:chat 请求（renderer → main）。渲染进程持有 key，按次传给主进程发起 HTTP
+export interface LLMChatRequest {
+  baseURL: string;   // 如 'https://api.deepseek.com/v1'
+  apiKey: string;
+  model: string;
+  messages: Array<{ role: 'system' | 'user'; content: string }>;
+  maxTokens?: number;      // 缺省 256
+  temperature?: number;    // 缺省不传给上游（兼容性最大化）
+}
+
+// llm:chat 响应。错误以值返回而不 throw，避免 IPC 包装错误信息
+export type LLMChatResponse =
+  | { ok: true; content: string }
+  | { ok: false; error: string };
+
 // IPC API 类型（与 preload.ts 对应）
 export interface ElectronAPI {
   platform: string;
@@ -128,6 +129,9 @@ export interface ElectronAPI {
     install: () => void;
     openDownloadPage: () => void;
     onStatus: (callback: (status: UpdateStatus) => void) => (() => void);
+  };
+  llm: {
+    chat: (req: LLMChatRequest) => Promise<LLMChatResponse>;
   };
 }
 

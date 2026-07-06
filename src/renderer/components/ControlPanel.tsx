@@ -3,10 +3,14 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { DanmakuMessage, UpdateState, UpdateStatus } from '../../shared/types';
-import { ServerConnection } from '../services/peerService';
+import { ServerConnection } from '../services/serverConnection';
+import { getDefaultServerUrl, resolveServerUrl } from '../services/serverConfig';
 import { ttsService, speakVoiceDanmaku } from '../services/ttsService';
+import { botService } from '../services/botService';
+import { useBotStore } from '../stores/botStore';
 import RoomPanel from './RoomPanel';
 import HistoryPanel from './HistoryPanel';
+import BotPanel from './BotPanel';
 
 const PRESET_COLORS = [
   { name: '白', value: '#ffffff' },
@@ -95,7 +99,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isContentCollapsed, setIsContentCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'settings' | 'room' | 'history' | 'about'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'room' | 'history' | 'bot' | 'about'>('settings');
   const [inputText, setInputText] = useState('');
   const [customColor, setCustomColor] = useState('');
   const [voiceInputText, setVoiceInputText] = useState('');
@@ -293,7 +297,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
   const { settings, updateSettings } = useSettingsStore();
   const { addHistory, clearAll, setMaxCount } = useDanmakuStore();
-  const { status, sendDanmaku, username } = useConnectionStore();
+  const { status, sendDanmaku, username, serverUrl, setServerUrl } = useConnectionStore();
+  const botRunning = useBotStore(s => s.running);  // 吐槽姬 tab 的运行中绿点
 
   // 语音开关关闭时停止朗读并清空队列
   useEffect(() => {
@@ -371,6 +376,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
     // 本窗口直接朗读（speakVoiceDanmaku 按弹幕 ID 去重，网络回环不会重复朗读）
     speakVoiceDanmaku(message, settings);
+
+    // 房主自己的弹幕不经过网络接收回调，这里喂给吐槽姬做关键词匹配
+    botService.onLocalDanmaku(message);
 
     // 开始 60s 倒计时
     setVoiceCooldown(60);
@@ -453,6 +461,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
       console.log('[ControlPanel] Sending via connection');
       sendDanmaku(message);
     }
+
+    // 房主自己的弹幕不经过网络接收回调，这里喂给吐槽姬做关键词匹配
+    botService.onLocalDanmaku(message);
 
     setInputText('');
   }, [inputText, settings, status, sendDanmaku, addHistory, username]);
@@ -630,6 +641,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                     onClick={() => setActiveTab('history')}
                   >
                     历史
+                  </button>
+                  <button
+                    className={`cp-tab ${activeTab === 'bot' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('bot')}
+                  >
+                    吐槽姬
+                    {botRunning && <span className="cp-tab-badge cp-tab-badge-bot" />}
                   </button>
                   <button
                     className={`cp-tab ${activeTab === 'about' ? 'active' : ''}`}
@@ -879,6 +897,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       </>
                     )}
 
+                    {/* 服务器 */}
+                    <div className="cp-section-title">服务器</div>
+                    <div className="cp-setting-row">
+                      <label>地址</label>
+                      <input
+                        type="text"
+                        className="cp-server-input"
+                        value={serverUrl}
+                        placeholder={getDefaultServerUrl() || 'ws://your-host:8080'}
+                        onChange={(e) => setServerUrl(e.target.value)}
+                      />
+                    </div>
+                    <div className="cp-server-hint">
+                      {resolveServerUrl()
+                        ? `当前生效：${resolveServerUrl()}（改动后重新进入房间生效）`
+                        : '⚠️ 未配置服务器地址，无法联机'}
+                    </div>
+
                   </div>
                 )}
                 {activeTab === 'room' && (
@@ -889,6 +925,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 {activeTab === 'history' && (
                   <div className="cp-history">
                     <HistoryPanel />
+                  </div>
+                )}
+                {activeTab === 'bot' && (
+                  <div className="cp-bot">
+                    <BotPanel />
                   </div>
                 )}
                 {activeTab === 'about' && (
@@ -1001,6 +1042,23 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
                     <div className="cp-about-section-block">
                       <h4>📋 更新日志</h4>
+
+                      <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.5.0</span>
+                        <p><strong>✨ 新功能</strong></p>
+                        <ul>
+                          <li>吐槽姬 AI 机器人：房主可在「吐槽姬」标签启动，AI 根据房间弹幕、在线用户和时间自动发送吐槽弹幕</li>
+                          <li>支持关键词触发回应，弹幕中 @角色名 必定触发；也可点「吐槽一下」手动触发</li>
+                          <li>吐槽人设与语言风格可自定义，可保存多个角色（AI 自动起名）并点击标签切换</li>
+                          <li>接口兼容 OpenAI 格式（DeepSeek / 通义 / Kimi 等），由房主自行填写 AccessKey，仅保存在本机</li>
+                          <li>服务器地址可自定义：「设置」新增服务器区块，支持连接自部署服务器</li>
+                        </ul>
+                        <p><strong>🔧 调整</strong></p>
+                        <ul>
+                          <li>移除 P2P 连接模式，统一走服务器中继，连接更稳定</li>
+                          <li>修复有密码房间断线重连失败的问题</li>
+                        </ul>
+                      </div>
 
                       <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.4.0</span>
