@@ -1044,13 +1044,19 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       <h4>📋 更新日志</h4>
 
                       <div className="cp-changelog-entry">
-                        <span className="cp-changelog-version">v1.4.1</span>
+                        <span className="cp-changelog-version">v1.5.0</span>
                         <p><strong>✨ 新功能</strong></p>
                         <ul>
                           <li>吐槽姬 AI 机器人：房主可在「吐槽姬」标签启动，AI 根据房间弹幕、在线用户和时间自动发送吐槽弹幕</li>
                           <li>支持关键词触发回应，弹幕中 @角色名 必定触发；也可点「吐槽一下」手动触发</li>
                           <li>吐槽人设与语言风格可自定义，可保存多个角色（AI 自动起名）并点击标签切换</li>
                           <li>接口兼容 OpenAI 格式（DeepSeek / 通义 / Kimi 等），由房主自行填写 AccessKey，仅保存在本机</li>
+                          <li>服务器地址可自定义：「设置」新增服务器区块，支持连接自部署服务器</li>
+                        </ul>
+                        <p><strong>🔧 调整</strong></p>
+                        <ul>
+                          <li>移除 P2P 连接模式，统一走服务器中继，连接更稳定</li>
+                          <li>修复有密码房间断线重连失败的问题</li>
                         </ul>
                       </div>
 

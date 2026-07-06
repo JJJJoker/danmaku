@@ -1,6 +1,6 @@
 {
   "name": "funapp",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "云弹一下 - 跨平台弹幕应用",
   "author": "tth",
   "main": ".vite/main/main.js",
