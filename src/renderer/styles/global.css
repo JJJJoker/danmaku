@@ -421,6 +421,33 @@ html, body {
   border-color: rgba(100, 150, 255, 0.5);
 }
 
+/* 服务器地址输入框 */
+.cp-server-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 10px;
+  outline: none;
+  font-family: monospace;
+}
+.cp-server-input:focus {
+  border-color: rgba(100, 150, 255, 0.5);
+}
+.cp-server-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+.cp-server-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
 /* Section titles */
 .cp-section-title {
   font-size: 11px;

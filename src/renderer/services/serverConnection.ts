@@ -1,6 +1,7 @@
 // WebSocket 服务器中继连接（云端 danmaku-server）
 // 由原 peerService.ts 拆分而来；P2P 模式已于 v1.5.0 移除，服务器中继是唯一联机方式
 import { DanmakuMessage, RoomUser, ServerMessage } from '../../shared/types';
+import { resolveServerUrl, deriveStatsUrl } from './serverConfig';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 export type PeerRole = 'host' | 'client' | 'none';
@@ -30,13 +31,19 @@ export class ServerConnection {
   private maxReconnectAttempts: number = 15;
   private _intentionalDisconnect: boolean = false; // 标记是否为主动断开
 
-  private SERVER_URL = 'ws://REDACTED_SERVER_IP:8080'; // 你的云服务器地址
-
   setCallbacks(callbacks: PeerEventCallbacks) {
     this.callbacks = callbacks;
   }
 
   async joinRoom(roomId: string, username: string, password?: string, isCreate?: boolean): Promise<void> {
+    // 每次连接时重新解析地址，用户在设置中改地址后重连即生效
+    const serverUrl = resolveServerUrl();
+    if (!serverUrl) {
+      const msg = '未配置服务器地址，请在「设置」中填写（如 ws://your-host:8080）';
+      this.callbacks?.onError(msg);
+      return Promise.reject(new Error(msg));
+    }
+
     this.roomId = roomId;
     this._intentionalDisconnect = false; // 重置主动断开标志
 
@@ -55,9 +62,9 @@ export class ServerConnection {
     // 注意: userId将在joinSuccess后由服务器分配
 
     return new Promise((resolve, reject) => {
-      console.log(`[ServerConnection] Connecting to ${this.SERVER_URL}...`);
+      console.log(`[ServerConnection] Connecting to ${serverUrl}...`);
 
-      this.ws = new WebSocket(this.SERVER_URL);
+      this.ws = new WebSocket(serverUrl);
 
       this.ws.onopen = () => {
         console.log('[ServerConnection] Connected to server');
@@ -254,7 +261,8 @@ export class ServerConnection {
     console.log(`[ServerConnection] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
 
     this.reconnectTimer = setTimeout(() => {
-      this.joinRoom(this.roomId, this.username);
+      // 重连时带上缓存的房间密码（避免有密码房间重连失败）；未配置地址时 joinRoom 会 reject，错误已经 onError 呈现
+      this.joinRoom(this.roomId, this.username, ServerConnection.getRoomPassword(this.roomId)).catch(() => {});
     }, delay);
   }
 
@@ -295,9 +303,14 @@ export class ServerConnection {
     hostRooms: Record<string, { roomCount: number; rooms: string[] }>;
     rooms: Array<{ roomId: string; clientCount: number; hasPassword: boolean; age: number }>;
   } | null> {
-    console.log('[ServerConnection] Fetching stats from http://REDACTED_SERVER_IP:8081/stats');
+    const statsUrl = deriveStatsUrl();
+    if (!statsUrl) {
+      console.warn('[ServerConnection] Server URL not configured, skip fetching stats');
+      return null;
+    }
+    console.log(`[ServerConnection] Fetching stats from ${statsUrl}`);
     try {
-      const response = await fetch('http://REDACTED_SERVER_IP:8081/stats');
+      const response = await fetch(statsUrl);
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`);
       }

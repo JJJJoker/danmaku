@@ -9,3 +9,8 @@ electron.zip
 *.exe
 *.log
 .DS_Store
+
+# 本地环境变量（.env.example 除外）
+.env
+.env.local
+.env.*.local
