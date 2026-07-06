@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useDanmakuStore } from '../stores/danmakuStore';
 import { useConnectionStore } from '../stores/connectionStore';
-import { DanmakuMessage } from '../../shared/types';
+import { DanmakuMessage, UpdateState, UpdateStatus } from '../../shared/types';
 import { ServerConnection } from '../services/peerService';
 import { ttsService, speakVoiceDanmaku } from '../services/ttsService';
 import RoomPanel from './RoomPanel';
@@ -100,6 +100,25 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
   const [customColor, setCustomColor] = useState('');
   const [voiceInputText, setVoiceInputText] = useState('');
   const [voiceCooldown, setVoiceCooldown] = useState(0); // 剩余秒数
+
+  // 软件更新状态
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  // 用户主动操作（检查/下载）后才展示 not-available / error 结果，启动自动检查失败保持静默
+  const [manualUpdateAction, setManualUpdateAction] = useState(false);
+
+  // 挂载时先订阅推送再拉取快照（cleanup 取消订阅，防监听器泄漏）
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.updater?.onStatus((status) => {
+      setUpdateStatus(status);
+    });
+    window.electronAPI?.updater?.getState().then((s) => {
+      setUpdateState(s);
+      // 快照只作初始值：若实时推送已先到达（如下载进行中重建窗口），不能用旧快照覆盖
+      setUpdateStatus((prev) => prev ?? s.status);
+    });
+    return () => unsubscribe?.();
+  }, []);
 
   // 拖拽位置状态
   const [position, setPosition] = useState(() => {
@@ -617,6 +636,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                     onClick={() => setActiveTab('about')}
                   >
                     说明
+                    {(updateStatus?.state === 'available' || updateStatus?.state === 'downloaded') && (
+                      <span className="cp-tab-badge" />
+                    )}
                   </button>
                 </div>
                 {!standalone && (
@@ -872,8 +894,97 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 {activeTab === 'about' && (
                   <div className="cp-about">
                     <div className="cp-about-header">
-                      <h3>云弹一下 v1.3.0</h3>
+                      <h3>云弹一下{updateState?.currentVersion ? ` v${updateState.currentVersion}` : ''}</h3>
                       <p className="cp-about-author">作者：tth</p>
+                    </div>
+
+                    <div className="cp-about-section-block">
+                      <h4>🔄 软件更新</h4>
+                      <div className="cp-update-area">
+                        {updateState?.capability === 'none' ? (
+                          <p className="cp-update-hint">开发模式不支持检查更新</p>
+                        ) : (
+                          <>
+                            <button
+                              className="cp-update-check-btn"
+                              disabled={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading'}
+                              onClick={() => {
+                                setManualUpdateAction(true);
+                                window.electronAPI?.updater?.check();
+                              }}
+                            >
+                              {updateStatus?.state === 'checking' ? '检查中…' : '检查更新'}
+                            </button>
+
+                            {updateStatus?.state === 'not-available' && manualUpdateAction && (
+                              <p className="cp-update-hint">当前已是最新版本</p>
+                            )}
+                            {updateStatus?.state === 'error' && manualUpdateAction && (
+                              <p className="cp-update-hint cp-update-error">检查更新失败，请检查网络后重试</p>
+                            )}
+
+                            {updateStatus?.state === 'available' && (
+                              <div className="cp-update-detail">
+                                <p className="cp-update-title">发现新版本 v{updateStatus.info.version}</p>
+                                {updateStatus.info.releaseNotes && (
+                                  <p className="cp-update-notes">{updateStatus.info.releaseNotes}</p>
+                                )}
+                                {updateState?.capability === 'auto' ? (
+                                  <button
+                                    className="cp-update-action-btn"
+                                    onClick={() => {
+                                      setManualUpdateAction(true);
+                                      window.electronAPI?.updater?.download();
+                                    }}
+                                  >
+                                    下载更新
+                                  </button>
+                                ) : (
+                                  <>
+                                    <p className="cp-update-hint">
+                                      {window.electronAPI?.platform === 'darwin'
+                                        ? '请前往下载页获取新版本安装包'
+                                        : '便携版无法自动更新，请前往下载页获取新版本'}
+                                    </p>
+                                    <button
+                                      className="cp-update-action-btn"
+                                      onClick={() => window.electronAPI?.updater?.openDownloadPage()}
+                                    >
+                                      前往下载页
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {updateStatus?.state === 'downloading' && (
+                              <div className="cp-update-detail">
+                                <div className="cp-update-progress">
+                                  <div
+                                    className="cp-update-progress-bar"
+                                    style={{ width: `${updateStatus.percent}%` }}
+                                  />
+                                </div>
+                                <p className="cp-update-hint">
+                                  {updateStatus.percent.toFixed(0)}% · {(updateStatus.bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s
+                                </p>
+                              </div>
+                            )}
+
+                            {updateStatus?.state === 'downloaded' && (
+                              <div className="cp-update-detail">
+                                <p className="cp-update-title">新版本 v{updateStatus.info.version} 下载完成</p>
+                                <button
+                                  className="cp-update-action-btn"
+                                  onClick={() => window.electronAPI?.updater?.install()}
+                                >
+                                  重启并安装
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <div className="cp-about-section-block">
@@ -890,6 +1001,16 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
                     <div className="cp-about-section-block">
                       <h4>📋 更新日志</h4>
+
+                      <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.4.0</span>
+                        <p><strong>✨ 新功能</strong></p>
+                        <ul>
+                          <li>软件自动更新：启动后自动检查新版本，「说明」标签显示红点提醒</li>
+                          <li>Windows 安装版支持一键下载更新并重启安装</li>
+                          <li>macOS 与便携版检测到新版本后可一键跳转下载页</li>
+                        </ul>
+                      </div>
 
                       <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.3.0</span>

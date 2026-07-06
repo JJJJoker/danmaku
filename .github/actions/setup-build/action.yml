@@ -1,0 +1,26 @@
+name: Setup and build
+description: 安装 Node 20、恢复 node_modules 缓存、npm ci、编译 renderer/main/preload（build.yml 与 release.yml 四个构建 job 共用，改 Node 版本或缓存策略只改这里）
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+
+    - name: Cache node_modules
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
+
+    - name: Build Vite and compile TypeScript
+      run: npm run build:vite
+      shell: bash

@@ -78,6 +78,33 @@ export interface DanmakuSettings {
   voiceVolume: number;                             // 音量 (0-1)
 }
 
+// ========== 软件更新 ==========
+
+// 更新能力：auto = NSIS 安装版可全自动更新 | download-page = macOS 与 zip 便携版仅提示跳转下载页 | none = 开发环境
+export type UpdateCapability = 'auto' | 'download-page' | 'none';
+
+export interface UpdateInfoLite {
+  version: string;        // 如 "1.4.0"
+  releaseNotes?: string;  // 主进程已剥 HTML 标签并截断的纯文本摘要
+  releaseDate?: string;
+}
+
+// 更新状态（主进程经 update:status 推送给控制面板窗口）
+export type UpdateStatus =
+  | { state: 'checking' }
+  | { state: 'available'; info: UpdateInfoLite }
+  | { state: 'not-available' }
+  | { state: 'downloading'; percent: number; transferred: number; total: number; bytesPerSecond: number }
+  | { state: 'downloaded'; info: UpdateInfoLite }
+  | { state: 'error'; message: string };
+
+// update:get-state 的返回值，UI 挂载时一次拉全（窗口重建后恢复状态）
+export interface UpdateState {
+  capability: UpdateCapability;
+  currentVersion: string;
+  status: UpdateStatus | null;
+}
+
 // IPC API 类型（与 preload.ts 对应）
 export interface ElectronAPI {
   platform: string;
@@ -94,6 +121,14 @@ export interface ElectronAPI {
   getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number }>;
   log: (message: string) => void;
   getLogPath: () => Promise<string>;
+  updater: {
+    getState: () => Promise<UpdateState>;
+    check: () => Promise<void>;      // 结果一律经 onStatus 推送
+    download: () => Promise<void>;
+    install: () => void;
+    openDownloadPage: () => void;
+    onStatus: (callback: (status: UpdateStatus) => void) => (() => void);
+  };
 }
 
 declare global {
