@@ -1,6 +1,9 @@
 # 软件自动更新与发版指南
 
 > 日期：2026-07-06 ｜ 分支：dev ｜ 适用版本：v1.4.0 起
+>
+> 本文为功能设计存档。日常发版操作请用 `/release` skill（`.claude/skills/release/SKILL.md`），
+> 版本号统一由 `scripts/bump-version.js` 管理（package.json / lock / README / 更新日志四处同步 + `--check` 校验）。
 
 ## 一、功能概览
 

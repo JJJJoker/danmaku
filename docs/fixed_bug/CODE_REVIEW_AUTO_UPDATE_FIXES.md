@@ -5,7 +5,7 @@
 - **问题反馈**：自动更新功能（electron-updater + GitHub Releases + workflows 改造）实现完成后的自查代码审查，8 个角度（逐行扫描/被删行为审计/跨文件追踪/复用/简化/效率/实现高度/CLAUDE.md 约定）
 - **结果**：定位 8 项确认/疑似问题，全部修复；另有 1 项误报经验证驳回。修复后 `npm run build:vite` 通过，tsc 与基线比对无新增错误（基线 16 = 当前 16），三个 workflow/action YAML 语法校验通过
 
-> 功能本体设计与发版流程见 `docs/AUTO_UPDATE_RELEASE_GUIDE.md`，本报告只存档审查发现的缺陷与修复。
+> 功能本体设计与发版流程见 `docs/archived/AUTO_UPDATE_RELEASE_GUIDE.md`，本报告只存档审查发现的缺陷与修复。
 
 ## 总体结论
 
