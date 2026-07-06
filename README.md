@@ -4,6 +4,14 @@
 
 一个基于 Electron + React + PeerJS 的跨平台 P2P 实时弹幕桌面应用。用户可以创建/加入房间，通过 WebRTC 数据通道实时发送和接收弹幕，弹幕以动画形式在桌面最顶层滚动显示。
 
+## 📦 版本与下载
+
+<!-- 本区块由 scripts/bump-version.js 维护，版本号行请勿手改格式 -->
+
+- 当前版本：**v1.4.0**
+- 下载安装包：[GitHub Releases](https://github.com/JJJJoker/danmaku/releases/latest)（Windows 安装版/便携版、macOS dmg）
+- Windows 安装版支持应用内自动更新；各版本更新说明见 Releases 页
+
 ## 核心特性
 
 - ✅ 全屏透明置顶窗口，弹幕覆盖在所有应用之上

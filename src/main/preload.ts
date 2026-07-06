@@ -43,4 +43,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 日志
   log: (message: string) => ipcRenderer.send('renderer-log', message),
   getLogPath: () => ipcRenderer.invoke('get-log-path'),
+
+  // 软件更新（类型见 src/shared/types.ts 的 ElectronAPI.updater）
+  // 注意：本文件禁止 import ../shared/types —— tsconfig.preload.json 未设 rootDir，
+  // 引入后 tsc 输出会从 .vite/preload/preload.js 漂移到 .vite/preload/main/preload.js，
+  // 而 main.ts 硬编码了前者路径，打包后会白屏。参数保持 any 范式。
+  updater: {
+    getState: () => ipcRenderer.invoke('update:get-state'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.send('update:install'),
+    openDownloadPage: () => ipcRenderer.send('update:open-download-page'),
+    // 订阅更新状态推送（返回取消订阅函数）
+    onStatus: (callback: (status: any) => void) => {
+      const listener = (_event: any, status: any) => callback(status);
+      ipcRenderer.on('update:status', listener);
+      return () => ipcRenderer.removeListener('update:status', listener);
+    },
+  },
 });

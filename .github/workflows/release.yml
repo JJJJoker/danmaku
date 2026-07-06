@@ -1,0 +1,139 @@
+name: Release
+
+# 合并即发版：push 到 main 时若 package.json 版本号没有对应的已发布 Release，
+# 自动打 tag → 建草稿 Release → 双平台构建上传 → 资产齐全后草稿翻正式。
+# 日常合并不改版本号时，只有 prepare 一个 job 跑几秒即结束。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 构建失败后可手动重跑（草稿未发布时会继续补齐资产并发布）
+
+permissions:
+  contents: write
+
+# 防止两次合并接连触发的并发发版
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 判断是否需要发版
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # 已存在同版本的正式 Release → 跳过；草稿仍在或无 Release → 继续（支持失败重跑）
+          IS_DRAFT=$(gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null || echo "missing")
+          if [ "$IS_DRAFT" = "false" ]; then
+            echo "Release v$VERSION 已正式发布，跳过发版"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 版本一致性校验（package.json / lock / README / 更新日志）
+        if: steps.check.outputs.should_release == 'true'
+        run: node scripts/bump-version.js --check
+
+      - name: 创建 tag（幂等）
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          TAG="v${{ steps.check.outputs.version }}"
+          # 用 GITHUB_TOKEN 推的 tag 不会触发其他 workflow（GitHub 防递归），发版逻辑都在本 workflow 内
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG 已存在，跳过创建"
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi
+
+      - name: 预建草稿 Release（幂等）
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.check.outputs.version }}"
+          # 预建草稿：消除双平台 job 并发各建一个 release 的竞态；
+          # --generate-notes 从合并的 PR 自动生成更新说明（即客户端"更新说明摘要"的来源）
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 草稿已存在，跳过创建"
+          else
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes
+          fi
+
+  release-windows:
+    name: Release Windows
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup and build
+        uses: ./.github/actions/setup-build
+
+      - name: 构建并上传到草稿 Release
+        run: npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 覆盖 .npmrc 里的国内镜像（npmmirror 的 NSIS 工具包会返回坏内容导致校验失败），CI 直连官方源
+          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+
+  release-macos:
+    name: Release macOS
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup and build
+        uses: ./.github/actions/setup-build
+
+      - name: 构建并上传到草稿 Release
+        run: npx electron-builder --mac --arm64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+
+  publish:
+    name: Publish release
+    needs: [prepare, release-windows, release-macos]
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 校验资产齐全后发布（草稿翻正式）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="v${{ needs.prepare.outputs.version }}"
+          ASSETS=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          echo "已上传资产："
+          echo "$ASSETS"
+          # 按名字断言更新链路的关键资产：缺 latest.yml 或安装包会让全体客户端更新 404，
+          # 数量校验兜不住"数量够但缺关键文件"的情况
+          MISSING=""
+          for pattern in '^latest\.yml$' '^latest-mac\.yml$' '\-win-x64\.exe$' '\-win-x64\.exe\.blockmap$' '\-win-x64\.zip$' '\-mac-arm64\.dmg$' '\-mac-arm64\.zip$'; do
+            echo "$ASSETS" | grep -qE "$pattern" || MISSING="$MISSING $pattern"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::缺少关键资产：$MISSING，不发布，请检查构建产物"
+            exit 1
+          fi
+          gh release edit "$TAG" --draft=false --latest
+          echo "Release $TAG 已发布"
