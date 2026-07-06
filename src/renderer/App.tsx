@@ -5,6 +5,7 @@ import { useConnectionStore } from './stores/connectionStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useDanmakuStore } from './stores/danmakuStore';
 import { speakVoiceDanmaku } from './services/ttsService';
+import { botService } from './services/botService';
 
 const App: React.FC = () => {
   // 获取 URL 参数
@@ -87,6 +88,11 @@ const App: React.FC = () => {
         const windowType = urlParams.get('window');
         if (danmaku.isVoice && !isReplay && windowType !== 'danmaku') {
           speakVoiceDanmaku(danmaku, settings);
+        }
+
+        // 吐槽姬关键词观察：只在控制面板/单窗口运行（botService 内部还有 running/去重/冷却守卫）
+        if (windowType !== 'danmaku') {
+          botService.onIncomingDanmaku(danmaku, roomId, !!isReplay);
         }
 
         // 如果当前是控制面板窗口，转发到弹幕窗口

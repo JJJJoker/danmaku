@@ -61,4 +61,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('update:status', listener);
     },
   },
+
+  // 吐槽姬 LLM 调用（类型见 src/shared/types.ts 的 LLMChatRequest/LLMChatResponse，
+  // 本文件同样禁止 import shared 类型，参数保持 any）
+  llm: {
+    chat: (req: any) => ipcRenderer.invoke('llm:chat', req),
+  },
 });
