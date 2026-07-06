@@ -5,7 +5,8 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export type PeerRole = 'host' | 'client' | 'none';
 
 export interface PeerEventCallbacks {
-  onDanmaku: (danmaku: DanmakuMessage) => void;
+  // isReplay=true 表示房间历史回放（init），仅用于展示，不触发朗读等副作用
+  onDanmaku: (danmaku: DanmakuMessage, isReplay?: boolean) => void;
   onUserListUpdate: (users: RoomUser[]) => void;
   onStatusChange: (status: ConnectionStatus) => void;
   onError: (error: string) => void;
@@ -515,7 +516,7 @@ export class RoomConnection {
         break;
       case 'init':
         message.payload.danmakus.forEach((d) => {
-          this.callbacks?.onDanmaku(d);
+          this.callbacks?.onDanmaku(d, true);
         });
         break;
       case 'leave':
