@@ -8,7 +8,7 @@
 
 <!-- 本区块由 scripts/bump-version.js 维护，版本号行请勿手改格式 -->
 
-- 当前版本：**v1.4.1**
+- 当前版本：**v1.5.0**
 - 下载安装包：[GitHub Releases](https://github.com/JJJJoker/danmaku/releases/latest)（Windows 安装版/便携版、macOS dmg）
 - Windows 安装版支持应用内自动更新；各版本更新说明见 Releases 页
 
@@ -100,29 +100,13 @@ npm run make -- --platform=darwin  # macOS
 ### 创建/加入房间
 
 1. 打开控制面板，切换到"房间"Tab
-2. **创建房间**: 点击"创建房间"按钮，会生成一个房间 ID
-3. **分享房间**: 将你的 **Peer ID** 和 **房间 ID** 分享给其他人
-4. **加入房间**: 输入对方的房间 ID 和 Peer ID，点击"加入房间"
+2. **创建房间**: 输入房间名点击"创建房间"（可选设置房间密码）
+3. **分享房间**: 将 **房间 ID**（和密码，如有）分享给其他人
+4. **加入房间**: 输入房间 ID（和密码），点击"加入房间"
 
 ### 发送弹幕
 
-目前版本需要在代码中或通过其他方式触发弹幕发送。可以在控制台测试：
-
-```javascript
-// 在 DevTools 控制台中测试
-import { peerService } from './services/peerService';
-import { useSettingsStore } from './stores/settingsStore';
-
-const msg = {
-  id: Date.now().toString(),
-  roomId: 'your_room_id',
-  sender: useSettingsStore.getState().nickname,
-  content: '测试弹幕',
-  timestamp: Date.now(),
-};
-
-peerService.sendDanmaku('your_room_id', msg);
-```
+在控制面板顶部输入框输入内容后回车/点击发送；开启语音朗读后可发送语音弹幕（带 🔊 标记，接收方会朗读）。
 
 ### 调整弹幕区域
 
@@ -156,7 +140,8 @@ yundanyixia/
 │   │   │   └── HistoryPanel.tsx
 │   │   ├── services/          # 业务逻辑
 │   │   │   ├── danmakuEngine.ts
-│   │   │   └── peerService.ts
+│   │   │   ├── serverConnection.ts
+│   │   │   └── serverConfig.ts
 │   │   ├── stores/            # Zustand 状态管理
 │   │   │   ├── connectionStore.ts
 │   │   │   ├── danmakuStore.ts
