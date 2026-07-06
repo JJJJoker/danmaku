@@ -22,6 +22,9 @@ jobs:
 
       - name: Build Windows application
         run: npx electron-builder --win --x64 --publish never
+        env:
+          # 覆盖 .npmrc 里的国内镜像（npmmirror 的 NSIS 工具包会返回坏内容导致校验失败），CI 直连官方源
+          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
       
       - name: Upload Windows exe
         uses: actions/upload-artifact@v4
@@ -57,6 +60,8 @@ jobs:
 
       - name: Build macOS application (ARM64)
         run: npx electron-builder --mac --arm64 --publish never
+        env:
+          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
       
       - name: Zip macOS app
         run: |
