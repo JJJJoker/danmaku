@@ -4,8 +4,18 @@ import type { UpdateStatus, UpdateCapability, UpdateInfoLite, UpdateState } from
 const path = require('path');
 const fs = require('fs');
 
-// 更新源为 GitHub Releases（公开仓库，客户端免 token），下载页给 mac 与 zip 便携版用
+// 更新源为双源策略：构建期注入了自建服务器地址时优先自建源（国内下载快），
+// 检查失败自动回退 GitHub Releases（公开仓库，客户端免 token）；未注入时纯 GitHub。
+// 下载页给 mac 与 zip 便携版用，保持指向 GitHub（权威发布源）
 const DOWNLOAD_PAGE = 'https://github.com/JJJJoker/danmaku/releases/latest';
+
+// GitHub 回退源：与 package.json build.publish 保持一致
+const GITHUB_FEED = { provider: 'github', owner: 'JJJJoker', repo: 'danmaku' } as const;
+// 自建更新源：__DANMAKU_UPDATE_URL__ 由 vite.main.config.ts 构建期注入，空串表示未配置。
+// useMultipleRangeRequest: false —— 服务端只实现了单段 Range，多段请求会被降级为全量 200
+const GENERIC_FEED = __DANMAKU_UPDATE_URL__
+  ? ({ provider: 'generic', url: __DANMAKU_UPDATE_URL__, useMultipleRangeRequest: false } as const)
+  : null;
 
 // 启动后延迟自动检查，避开窗口创建/渲染高峰
 const AUTO_CHECK_DELAY_MS = 10_000;
@@ -69,6 +79,9 @@ export function setupAutoUpdater(opts: {
   let lastStatus: UpdateStatus | null = null;
   // downloading 进度节流：控制面板是大组件，高频 setState 会引起整树重渲染
   let lastProgressPushAt = 0;
+  // 自建源检查失败待回退 GitHub 期间置 true：error 事件只记日志不推状态，
+  // 避免 UI 先闪一次 error 再回到 checking（checkForUpdates 的 rejection 与 error 事件同源）
+  let suppressErrorStatus = false;
 
   function pushStatus(status: UpdateStatus) {
     if (status.state === 'downloading') {
@@ -133,6 +146,10 @@ export function setupAutoUpdater(opts: {
       pushStatus({ state: 'downloaded', info: toInfoLite(info) });
     });
     autoUpdater.on('error', (err) => {
+      if (suppressErrorStatus) {
+        log(`[Updater] 自建源出错（待回退 GitHub，不推送状态）: ${err?.message ?? err}`);
+        return;
+      }
       // 错误只推状态不弹窗：自动检查失败静默，手动检查由渲染端决定展示
       pushStatus({ state: 'error', message: (err?.message ?? String(err)).slice(0, 200) });
     });
@@ -147,6 +164,24 @@ export function setupAutoUpdater(opts: {
     // 已下载完成时不再检查：避免网络失败的 error 状态覆盖 downloaded，把"重启并安装"入口冲掉
     if (lastStatus?.state === 'downloaded') return;
     pushStatus({ state: 'checking' });
+    // 双源检查：每次都从自建源开始（不做会话内粘性回退，服务器恢复后流量自动切回），
+    // 自建源失败回退 GitHub。回退只发生在检查阶段：downloadUpdate 复用本次检查
+    // 命中的 provider 缓存，下载中途失败不切源，用户再点"检查更新"会重跑整条链路
+    if (GENERIC_FEED) {
+      autoUpdater.setFeedURL(GENERIC_FEED);
+      suppressErrorStatus = true;
+      try {
+        await autoUpdater.checkForUpdates();
+        suppressErrorStatus = false;
+        return;
+      } catch (err) {
+        suppressErrorStatus = false;
+        log(`[Updater] 自建源检查失败，回退 GitHub: ${(err as Error)?.message ?? err}`);
+        autoUpdater.setFeedURL(GITHUB_FEED);
+        // 维持 checking 状态，UI 对回退无感知
+        pushStatus({ state: 'checking' });
+      }
+    }
     try {
       await autoUpdater.checkForUpdates();
     } catch {

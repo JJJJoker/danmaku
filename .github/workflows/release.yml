@@ -86,6 +86,8 @@ jobs:
         uses: ./.github/actions/setup-build
         env:
           VITE_DANMAKU_SERVER_URL: ${{ vars.DANMAKU_SERVER_URL }}
+          # 自建更新源地址（generic feed），为空时客户端纯走 GitHub Releases
+          DANMAKU_UPDATE_URL: ${{ vars.DANMAKU_UPDATE_URL }}
 
       - name: 构建并上传到草稿 Release
         run: npx electron-builder --win --x64 --publish always
@@ -107,6 +109,8 @@ jobs:
         uses: ./.github/actions/setup-build
         env:
           VITE_DANMAKU_SERVER_URL: ${{ vars.DANMAKU_SERVER_URL }}
+          # 自建更新源地址（generic feed），为空时客户端纯走 GitHub Releases
+          DANMAKU_UPDATE_URL: ${{ vars.DANMAKU_UPDATE_URL }}
 
       - name: 构建并上传到草稿 Release
         run: npx electron-builder --mac --arm64 --publish always
@@ -141,3 +145,98 @@ jobs:
           fi
           gh release edit "$TAG" --draft=false --latest
           echo "Release $TAG 已发布"
+
+  # 把发版资产同步到自建更新服务器（客户端 generic 更新源，国内下载快）。
+  # 放在 GitHub 正式发布之后：本 job 失败只影响自建源（客户端自动回退 GitHub），
+  # 不影响已完成的发布。恢复方式：Actions 页 "Re-run failed jobs" 只重跑本 job——
+  # 不能整个 workflow 重跑，prepare 会因 Release 已正式发布判 should_release=false 跳过一切。
+  upload-update-server:
+    name: Upload to update server
+    needs: [prepare, publish]
+    # DANMAKU_UPDATE_URL 兼作总开关（secrets 不能用于 job 级 if，所以用 var 判断）
+    if: needs.prepare.outputs.should_release == 'true' && vars.DANMAKU_UPDATE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 下载 Release 资产
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="v${{ needs.prepare.outputs.version }}"
+          gh release download "$TAG" --dir assets
+          # 与 publish job 同款断言：资产不齐全宁可让本 job 红，也不推半套上服务器
+          MISSING=""
+          for pattern in '^latest\.yml$' '^latest-mac\.yml$' '\-win-x64\.exe$' '\-win-x64\.exe\.blockmap$' '\-win-x64\.zip$' '\-mac-arm64\.dmg$' '\-mac-arm64\.zip$'; do
+            ls assets | grep -qE "$pattern" || MISSING="$MISSING $pattern"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::下载的资产不齐全：$MISSING"
+            exit 1
+          fi
+
+      - name: 配置 SSH
+        env:
+          UPDATE_SSH_KEY: ${{ secrets.UPDATE_SSH_KEY }}
+          UPDATE_SSH_KNOWN_HOSTS: ${{ secrets.UPDATE_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$UPDATE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # host key 由运维本地 ssh-keyscan 一次性产出存 secret（生成方法见 danmaku-server/DEPLOYMENT.md）；
+          # 不在 CI 运行时 keyscan——那等于每次都 TOFU，放弃 host 校验
+          printf '%s\n' "$UPDATE_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: 上传资产（先二进制后 yml，yml 原子生效）
+        env:
+          SSH_HOST: ${{ secrets.UPDATE_SSH_HOST }}
+          SSH_USER: ${{ secrets.UPDATE_SSH_USER }}
+          SSH_PORT: ${{ secrets.UPDATE_SSH_PORT }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          DEST="$SSH_USER@$SSH_HOST"
+          DIR=/opt/danmaku-server/updates
+          RSH="ssh -p $PORT -o BatchMode=yes"
+          retry() { local i; for i in 1 2 3; do "$@" && return 0; echo "第 $i 次失败，15s 后重试..."; sleep 15; done; return 1; }
+
+          retry $RSH "$DEST" "mkdir -p $DIR"
+          # 第一批：二进制 + blockmap。新版本文件名不与线上冲突，直接进目录无窗口期；
+          # --partial 保留断传文件供重试续传（Actions → 国内链路慢/断的关键缓解）
+          retry rsync -av --partial --timeout=120 -e "$RSH" assets/yundan-* "$DEST:$DIR/"
+          # 第二批：yml 先传 .tmp 再远端 rename 原子生效——客户端永远读不到半截 yml，
+          # 且 yml 生效时其指向的二进制必然已就位
+          retry rsync -av --timeout=120 -e "$RSH" assets/latest.yml "$DEST:$DIR/latest.yml.tmp"
+          retry rsync -av --timeout=120 -e "$RSH" assets/latest-mac.yml "$DEST:$DIR/latest-mac.yml.tmp"
+          retry $RSH "$DEST" "mv -f $DIR/latest.yml.tmp $DIR/latest.yml && mv -f $DIR/latest-mac.yml.tmp $DIR/latest-mac.yml"
+
+      - name: 清理旧版本（保留最近 3 版）
+        env:
+          SSH_HOST: ${{ secrets.UPDATE_SSH_HOST }}
+          SSH_USER: ${{ secrets.UPDATE_SSH_USER }}
+          SSH_PORT: ${{ secrets.UPDATE_SSH_PORT }}
+        run: |
+          # 保留 3 版兼顾磁盘（每版约 400MB）与差量更新（旧客户端的 blockmap 需在线）
+          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE'
+          cd /opt/danmaku-server/updates || exit 0
+          ls yundan-* 2>/dev/null \
+            | sed -E 's/^yundan-(.+)-(win|mac)-.*$/\1/' \
+            | sort -uV | head -n -3 \
+            | while read -r v; do
+                echo "删除旧版本 $v"
+                rm -f "yundan-$v"-*
+              done
+          REMOTE
+
+      - name: 发布后自检
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          UPDATE_URL="${{ vars.DANMAKU_UPDATE_URL }}"
+          # latest.yml 已生效且指向新版本
+          curl -fsS --max-time 20 "$UPDATE_URL/latest.yml" | grep -q "version: $VERSION" \
+            || { echo "::error::自建源 latest.yml 未生效（不是 $VERSION）"; exit 1; }
+          # 差量更新依赖的单段 Range 可用
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            -H "Range: bytes=0-0" "$UPDATE_URL/yundan-$VERSION-win-x64.exe")
+          [ "$CODE" = "206" ] || { echo "::error::Range 请求返回 $CODE，期望 206"; exit 1; }
+          echo "自建更新源已同步至 v$VERSION"

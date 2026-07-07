@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // 自建更新服务器地址（如 http://IP:8081/updates），构建期静态替换为字符串字面量。
+  // 官方发版由 CI 从仓库变量 DANMAKU_UPDATE_URL 注入；为空时客户端只走 GitHub Releases
+  define: {
+    __DANMAKU_UPDATE_URL__: JSON.stringify(process.env.DANMAKU_UPDATE_URL ?? ''),
+  },
   build: {
     outDir: '.vite/main',
     lib: {
