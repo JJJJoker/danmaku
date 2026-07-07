@@ -3,12 +3,41 @@ name: Build
 # PR 冒烟构建（不发布）：测试 + 双平台打包，在合并前暴露"能编译但打不了包"的问题。
 # 只在 PR 阶段跑——合并 push 后不再重复冒烟（发版构建由 release.yml 负责，其余由其 test 门禁兜底），
 # 避免同一 commit 被构建多次。需要临时出包时用 workflow_dispatch 手动触发。
+#
+# 纯文档 PR（只动 docs/ 与 *.md）跳过双平台构建（Test 仍跑）。注意实现方式：
+# 触发条件不加 paths-ignore，而是由 changes job 探测后在 job 层 skip——
+# workflow 级不触发会让 required check 永远停在 Expected 卡死 PR，job 级 skip 则视为通过。
 on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
 
 jobs:
+  # 探测 PR 是否含代码改动（非 docs/ 且非 *.md）；手动触发一律视为有
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: 按 PR 文件清单判断是否纯文档
+        id: filter
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FILES=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename')
+          echo "PR 变更文件："
+          echo "$FILES"
+          if echo "$FILES" | grep -vE '^docs/|\.md$' | grep -q .; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "纯文档改动，跳过双平台构建"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
   # 单元/集成测试（客户端 vitest + danmaku-server vitest），与双平台构建并行。
   # release.yml 里有同款 job（发版门禁卡在 prepare 之前）；两处保持同步，不值得为此抽 composite action
   test:
@@ -50,8 +79,10 @@ jobs:
 
   build-windows:
     name: Build Windows
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -90,8 +121,10 @@ jobs:
 
   build-macos:
     name: Build macOS
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
