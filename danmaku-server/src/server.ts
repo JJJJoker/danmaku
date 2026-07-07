@@ -624,9 +624,22 @@ export class DanmakuServer {
   }
 }
 
-// 直接运行（node dist/server.js / ts-node src/server.ts / PM2）时自启动；被 import（测试）时不启动。
+// 入口判定（抽成纯函数以便测试）：直接运行（node dist/server.js / ts-node src/server.ts）时
+// require.main 命中本模块；PM2 托管时（cluster/fork 模式都一样）入口是 PM2 的 ProcessContainer
+// 包装器，require.main 永远不是本模块，只能靠 PM2 注入的 pm_id 环境变量识别——
+// 2026-07-07 部署事故：只查 require.main 导致 PM2 下服务静默不启动（进程 online 但无端口监听）。
+export function shouldAutoStart(
+  requireMain: NodeModule | undefined,
+  entryModule: NodeModule,
+  env: NodeJS.ProcessEnv
+): boolean {
+  if (requireMain === entryModule) return true;
+  return env.pm_id !== undefined;
+}
+
+// 满足入口判定时自启动；被 import（测试）时不启动。
 // 注意：不得恢复无条件的顶层 new DanmakuServer()，否则测试 import 本模块就会抢占真实端口。
-// typeof require 前置判断：vitest 会把本 CJS 模块转成 ESM 执行，裸引用 require 会 ReferenceError。
-if (typeof require !== 'undefined' && require.main === module) {
+// typeof require 前置判断：vitest 会把本 CJS 模块转成 ESM 执行，裸引用 require/module 会 ReferenceError。
+if (typeof require !== 'undefined' && shouldAutoStart(require.main, module, process.env)) {
   new DanmakuServer();
 }

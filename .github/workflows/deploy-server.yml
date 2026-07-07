@@ -96,5 +96,8 @@ jobs:
             fi
             echo "第 $i 次探测未通过，重试..."
           done
-          echo "::error::部署后 /stats 探测失败，请登录服务器执行 npx pm2 logs danmaku-server 排查"
+          echo "::error::部署后 /stats 探测失败，最近日志如下（完整日志登录服务器 npx pm2 logs danmaku-server）"
+          # 把 pm2 近期日志带回 CI 输出，区分「崩溃循环」与「进程在但没监听」两类故障
+          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes "$SSH_USER@$SSH_HOST" \
+            "npx pm2 logs danmaku-server --lines 30 --nostream" || true
           exit 1
