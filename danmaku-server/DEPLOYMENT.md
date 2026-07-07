@@ -251,7 +251,7 @@ pm2 flush
 
 ### 更新服务
 
-**推荐方式：GitHub Actions 一键部署**。仓库 Actions 页手动运行 **Deploy Server** workflow（`deploy-server.yml`）：自动跑测试门禁 → CI 编译 dist → rsync 上传 → 服务器装生产依赖 → `npx pm2 restart` → `/stats` 自检。复用更新源同步的同一套 SSH secrets，无需额外配置。
+**推荐方式：GitHub Actions 一键部署**。仓库 Actions 页手动运行 **Deploy Server** workflow（`deploy-server.yml`）：自动跑测试门禁 → CI 编译 dist 并安装生产依赖 → rsync 上传（dist + node_modules）→ `npx pm2 restart` → `/stats` 自检。复用更新源同步的同一套 SSH secrets，无需额外配置。生产依赖（含 better-sqlite3 预编译二进制）在 CI 侧装好整体同步，**服务器全程不需要访问 GitHub / nodejs.org / npm registry**（国内直连会超时，这是 2026-07 首次部署失败的根因）。
 
 手动方式（备用）：
 
@@ -263,8 +263,10 @@ ssh <用户>@<你的服务器IP>
 # 3. 进入项目目录
 cd /opt/danmaku-server
 
-# 4. 安装依赖并重新编译（依赖含 better-sqlite3 原生模块，须在服务器本机安装）
-npm ci
+# 4. 安装依赖并重新编译。注意：better-sqlite3 的预编译包托管在 GitHub Releases，
+#    服务器直连会超时，须走 npmmirror 镜像（镜像路径若失效，以 npmmirror 官方文档为准）
+export npm_config_better_sqlite3_binary_host_mirror=https://npmmirror.com/mirrors/better-sqlite3
+npm ci --registry=https://registry.npmmirror.com
 npm run build
 
 # 5. 重启服务

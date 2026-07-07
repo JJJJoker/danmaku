@@ -1,6 +1,6 @@
 name: Deploy Server
 
-# 服务端手动部署：测试门禁 → CI 构建 dist → rsync 上传 → 远端装生产依赖 → npx pm2 重启 → /stats 自检。
+# 服务端手动部署：测试门禁 → CI 构建 dist + 装生产依赖 → rsync 上传 → npx pm2 重启 → /stats 自检。
 # 仅 workflow_dispatch 手动触发（重启会断开在线连接；房间状态已持久化到 SQLite 且客户端会自动重连，
 # 用户基本无感，但仍建议低峰操作。稳定后如需改为合并自动部署，加 push+paths 触发即可）。
 # 复用 release.yml 更新源同步的同一套 SSH secrets。
@@ -39,6 +39,15 @@ jobs:
         run: npm run build
         working-directory: danmaku-server
 
+      # 生产依赖在 CI 侧装好、随 rsync 整体同步：服务器直连 GitHub（better-sqlite3 预编译包）
+      # 和 nodejs.org（node-gyp 回退编译所需 headers）均超时，且服务器 Python 3.6 跑不动 node-gyp 10，
+      # 在服务器本机 npm ci 必然失败（2026-07-07 首次部署即栽在这）。
+      # CI runner 与服务器同为 linux x64 + Node 20（ABI 一致），预编译二进制可直接使用；
+      # 服务器升级 Node 大版本时，上面 setup-node 的 node-version 必须同步，否则原生模块 ABI 不匹配
+      - name: 精简为生产依赖（CI 侧安装，服务器免外网）
+        run: npm ci --omit=dev
+        working-directory: danmaku-server
+
       - name: 配置 SSH
         env:
           UPDATE_SSH_KEY: ${{ secrets.UPDATE_SSH_KEY }}
@@ -61,14 +70,14 @@ jobs:
           DEST="$SSH_USER@$SSH_HOST"
           DIR=/opt/danmaku-server
           RSH="ssh -p $PORT -o BatchMode=yes"
-          # --delete 只作用于 dist/ 内部（清掉改名/删除的旧编译产物）；
+          # --delete 只作用于 dist/、node_modules/ 内部（清掉旧编译产物与残破依赖）；
           # 不触碰同级的 updates/（发版资产）、danmaku.db*（房间持久化）、
-          # node_modules/、ecosystem.config.js（首次部署由 deploy.sh 生成）
+          # ecosystem.config.js（首次部署由 deploy.sh 生成）
           rsync -av --delete -e "$RSH" danmaku-server/dist/ "$DEST:$DIR/dist/"
+          rsync -avz --delete -e "$RSH" danmaku-server/node_modules/ "$DEST:$DIR/node_modules/"
           rsync -av -e "$RSH" danmaku-server/package.json danmaku-server/package-lock.json "$DEST:$DIR/"
-          # 生产依赖含 better-sqlite3 原生模块，必须在服务器本机安装（prebuild 按平台分发，
-          # 预编译下载失败会回退 node-gyp 编译，届时需要服务器装 build-essential + python3）
-          $RSH "$DEST" "cd $DIR && npm ci --omit=dev && npx pm2 restart danmaku-server"
+          # pm2 为服务器全局安装（DEPLOYMENT.md 步骤7），npx 直接命中本机的，不会去联网下载
+          $RSH "$DEST" "cd $DIR && npx pm2 restart danmaku-server"
 
       - name: 部署后自检
         env:
