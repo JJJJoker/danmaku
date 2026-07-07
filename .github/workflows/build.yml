@@ -1,9 +1,9 @@
 name: Build
 
-# CI 冒烟构建（不发布）。正式发版走 release.yml：合并到 main 且 package.json 版本号变化时自动发 Release
+# PR 冒烟构建（不发布）：测试 + 双平台打包，在合并前暴露"能编译但打不了包"的问题。
+# 只在 PR 阶段跑——合并 push 后不再重复冒烟（发版构建由 release.yml 负责，其余由其 test 门禁兜底），
+# 避免同一 commit 被构建多次。需要临时出包时用 workflow_dispatch 手动触发。
 on:
-  push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
