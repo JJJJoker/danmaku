@@ -1,6 +1,6 @@
 name: Deploy Server
 
-# 服务端手动部署：测试门禁 → CI 构建 dist → rsync 上传 → 远端装生产依赖 → npx pm2 重启 → /stats 自检。
+# 服务端手动部署：测试门禁 → CI 构建 dist + 装生产依赖 → rsync 上传 → npx pm2 重启 → /stats 自检。
 # 仅 workflow_dispatch 手动触发（重启会断开在线连接；房间状态已持久化到 SQLite 且客户端会自动重连，
 # 用户基本无感，但仍建议低峰操作。稳定后如需改为合并自动部署，加 push+paths 触发即可）。
 # 复用 release.yml 更新源同步的同一套 SSH secrets。
@@ -39,6 +39,27 @@ jobs:
         run: npm run build
         working-directory: danmaku-server
 
+      # 生产依赖在 CI 侧装好、随 rsync 整体同步：服务器直连 GitHub/nodejs.org 均超时，
+      # 且服务器 Python 3.6 跑不动 node-gyp 10，在服务器本机 npm ci 必然失败（2026-07-07 部署事故之一）。
+      # better-sqlite3 必须在 rockylinux:8 容器内【源码编译】：官方预编译包要求 glibc ≥2.38，
+      # 服务器（Alibaba Cloud Linux 8）只有 2.28，直接用预编译包会启动即 ERR_DLOPEN——
+      # 而 pm2 cluster 把这种启动期异常记成 code 0 干净退出、应用日志零输出，极难定位
+      # （2026-07-07 部署事故之二，勿回退成 runner 上直接 npm ci）。
+      # 容器 nodejs:20 模块流与服务器 Node 20 同 ABI；服务器升级 Node 大版本时此处须同步。
+      # 末尾构造 Database 是防回归自检：在 glibc 2.28 下真实加载原生绑定（懒加载，bare require 测不到），
+      # 编译产物不兼容当场红，不带病 rsync
+      - name: 精简为生产依赖（rockylinux:8 容器内源码编译，匹配服务器 glibc 2.28）
+        run: |
+          docker run --rm -v "$PWD/danmaku-server:/work" -w /work rockylinux:8 bash -euc '
+            dnf -y -q module enable nodejs:20
+            dnf -y -q install nodejs npm python3.11 gcc-toolset-12-gcc-c++ make >/dev/null
+            source /opt/rh/gcc-toolset-12/enable
+            export npm_config_python=python3.11
+            export npm_config_build_from_source=true
+            npm ci --omit=dev
+            node -e "const D=require(\"better-sqlite3\"); new D(\"/tmp/t.db\").exec(\"CREATE TABLE t(x)\"); console.log(\"better-sqlite3 源码编译产物在 glibc \" + process.report.getReport().header.glibcVersionRuntime + \" 下加载 OK\")"
+          '
+
       - name: 配置 SSH
         env:
           UPDATE_SSH_KEY: ${{ secrets.UPDATE_SSH_KEY }}
@@ -61,14 +82,14 @@ jobs:
           DEST="$SSH_USER@$SSH_HOST"
           DIR=/opt/danmaku-server
           RSH="ssh -p $PORT -o BatchMode=yes"
-          # --delete 只作用于 dist/ 内部（清掉改名/删除的旧编译产物）；
+          # --delete 只作用于 dist/、node_modules/ 内部（清掉旧编译产物与残破依赖）；
           # 不触碰同级的 updates/（发版资产）、danmaku.db*（房间持久化）、
-          # node_modules/、ecosystem.config.js（首次部署由 deploy.sh 生成）
+          # ecosystem.config.js（首次部署由 deploy.sh 生成）
           rsync -av --delete -e "$RSH" danmaku-server/dist/ "$DEST:$DIR/dist/"
+          rsync -avz --delete -e "$RSH" danmaku-server/node_modules/ "$DEST:$DIR/node_modules/"
           rsync -av -e "$RSH" danmaku-server/package.json danmaku-server/package-lock.json "$DEST:$DIR/"
-          # 生产依赖含 better-sqlite3 原生模块，必须在服务器本机安装（prebuild 按平台分发，
-          # 预编译下载失败会回退 node-gyp 编译，届时需要服务器装 build-essential + python3）
-          $RSH "$DEST" "cd $DIR && npm ci --omit=dev && npx pm2 restart danmaku-server"
+          # pm2 为服务器全局安装（DEPLOYMENT.md 步骤7），npx 直接命中本机的，不会去联网下载
+          $RSH "$DEST" "cd $DIR && npx pm2 restart danmaku-server"
 
       - name: 部署后自检
         env:
@@ -87,5 +108,18 @@ jobs:
             fi
             echo "第 $i 次探测未通过，重试..."
           done
-          echo "::error::部署后 /stats 探测失败，请登录服务器执行 npx pm2 logs danmaku-server 排查"
+          echo "::error::部署后 /stats 探测失败，以下为远端诊断信息"
+          # 一次带回全部诊断：版本、代码新旧、原生模块可加载性（glibc/ABI）、应用日志、pm2 守护进程日志。
+          # 加载 dist/app.js 只 require 实现（含 better-sqlite3），不会启动服务，无副作用
+          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes "$SSH_USER@$SSH_HOST" '
+            cd /opt/danmaku-server
+            echo "--- pm2 / node 版本"; npx pm2 --version; node --version
+            echo "--- 新代码就位检查（dist/app.js 应存在）"; ls -l dist/app.js || echo "app.js 缺失 = 部署的是旧代码"
+            echo "--- 模块加载测试（glibc/ABI 不兼容会在此打印报错）"
+            node -e "require(\"./dist/app.js\"); console.log(\"app.js JS 层可加载\")" || true
+            # better-sqlite3 的原生绑定是懒加载：bare require 不碰 .node 文件，必须构造 Database 才真加载
+            node -e "const D=require(\"better-sqlite3\"); new D(\"/tmp/deploy-abi-test.db\").exec(\"CREATE TABLE IF NOT EXISTS t(x)\"); console.log(\"better-sqlite3 原生绑定 OK\")" || true
+            echo "--- 应用日志（最近 30 行）"; npx pm2 logs danmaku-server --lines 30 --nostream || true
+            echo "--- pm2 守护进程日志（启动期异常记在这里）"; tail -40 ~/.pm2/pm2.log || true
+          ' || true
           exit 1
