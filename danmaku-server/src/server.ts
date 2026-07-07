@@ -1,14 +1,32 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
-import { createServer } from 'http';
+import { createServer, Server as HttpServer } from 'http';
+import { AddressInfo } from 'net';
 import { Room } from './room';
 import { ServerMessage } from './types';
 import { isUpdatesRequest, serveUpdateFile } from './updates-static';
 
-const PORT = parseInt(process.env.PORT || '8080', 10);
+// 可测性注入点：写死的常量一律走构造参数（默认值 = 生产行为），详见 docs/TESTING_GUIDELINES.md
+export interface DanmakuServerOptions {
+  /** WebSocket 端口；默认读环境变量 PORT（缺省 8080），0 = 内核分配临时端口（测试用） */
+  port?: number;
+  /** 管理 HTTP 端口；默认 弹幕端口 + 1，port 为 0 时同样取 0 */
+  httpPort?: number;
+  maxRooms?: number;
+  maxUsersPerRoom?: number;
+  maxRoomsPerHost?: number;
+  /** 房间清扫定时器间隔（毫秒） */
+  cleanupIntervalMs?: number;
+  /** 客户端 IP 解析函数；默认取 socket.remoteAddress，测试可改从自定义 header 读取以模拟多 IP */
+  resolveClientIp?: (req: IncomingMessage) => string;
+}
 
-class DanmakuServer {
+export class DanmakuServer {
   private wss: WebSocketServer;
+  private httpServer: HttpServer;
+  private cleanupTimer: NodeJS.Timeout;
+  private readyPromise: Promise<void>;
+  private resolveClientIp: (req: IncomingMessage) => string;
   private rooms: Map<string, Room> = new Map();
   
   // 新增: 用户会话映射 userId -> { ws, roomId }
@@ -20,15 +38,23 @@ class DanmakuServer {
   // IP 到 userId 的映射，确保同一 IP 始终同一个用户 ID
   private ipToUserId: Map<string, string> = new Map();
   
-  // 房间配置
-  private readonly MAX_ROOMS = 100; // 最大房间数
-  private readonly MAX_USERS_PER_ROOM = 50; // 每个房间最大用户数
+  // 房间配置（上限类可经构造参数覆盖，默认值即生产值）
+  private readonly MAX_ROOMS: number; // 最大房间数，默认100
+  private readonly MAX_USERS_PER_ROOM: number; // 每个房间最大用户数，默认50
   private readonly ROOM_TTL = 3600000; // 房间存活时间(1小时)
   private readonly EMPTY_ROOM_TTL = 86400000; // 空房间存活时间(24小时) - 房主创建的房间保留更久
-  private readonly MAX_ROOMS_PER_HOST = 2; // 每个用户最多创建2个房间
+  private readonly MAX_ROOMS_PER_HOST: number; // 每个用户最多创建的房间数，默认2
 
-  constructor() {
-    this.wss = new WebSocketServer({ port: PORT });
+  constructor(options: DanmakuServerOptions = {}) {
+    const port = options.port ?? parseInt(process.env.PORT || '8080', 10);
+    const httpPort = options.httpPort ?? (port > 0 ? port + 1 : 0);
+    this.MAX_ROOMS = options.maxRooms ?? 100;
+    this.MAX_USERS_PER_ROOM = options.maxUsersPerRoom ?? 50;
+    this.MAX_ROOMS_PER_HOST = options.maxRoomsPerHost ?? 2;
+    this.resolveClientIp = options.resolveClientIp ??
+      ((req) => req.socket.remoteAddress?.replace('::ffff:', '') || 'unknown');
+
+    this.wss = new WebSocketServer({ port });
     
     this.wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       console.log('[Server] New connection from', req.socket.remoteAddress);
@@ -49,7 +75,7 @@ class DanmakuServer {
               roomId = newRoomId;
               
               // 基于 IP 分配固定 userId，同一 IP 始终同一个 ID
-              const clientIp = req.socket.remoteAddress?.replace('::ffff:', '') || 'unknown';
+              const clientIp = this.resolveClientIp(req);
               
               if (this.ipToUserId.has(clientIp)) {
                 // 同一 IP 返回已有 ID
@@ -272,19 +298,7 @@ class DanmakuServer {
               }));
               
               break;
-            
-            // 用于测试服务器连接的ping消息
-            case 'ping':
-              const { timestamp } = message.payload;
-              ws.send(JSON.stringify({
-                type: 'pong',
-                payload: {
-                  timestamp,
-                  serverTime: Date.now()
-                }
-              }));
-              break;
-            
+
             case 'deleteRoom':
               const { roomId: deleteRoomId, userId: deleterId } = message.payload;
               
@@ -374,48 +388,12 @@ class DanmakuServer {
       });
     });
 
-    // 定期健康检查
-    setInterval(() => {
-      const now = Date.now();
-      const toDelete: string[] = [];
-      
-      this.rooms.forEach((room, roomId) => {
-        // 检查房间健康（断开死连接）
-        room.checkHealth();
-        
-        const isEmpty = room.getClientCount() === 0;
-        
-        if (isEmpty) {
-          // 空房间使用更长的TTL，让房主有时间回来
-          const emptySince = room.getEmptySince();
-          if (emptySince && (now - emptySince > this.EMPTY_ROOM_TTL)) {
-            console.log(`[Server] Empty room expired: ${roomId}`);
-            toDelete.push(roomId);
-            return;
-          }
-          // 非host创建的房间或超时过长的房间
-          if (now - room.createdAt > this.ROOM_TTL) {
-            console.log(`[Server] Room expired by age: ${roomId}`);
-            toDelete.push(roomId);
-            return;
-          }
-        }
-      });
-      
-      // 批量删除并清理hostRooms映射
-      toDelete.forEach(roomId => {
-        this.removeFromHostRooms(roomId);
-        this.rooms.delete(roomId);
-      });
-      
-      // 输出统计信息
-      if (toDelete.length > 0) {
-        console.log(`[Server] Cleaned up ${toDelete.length} rooms, remaining: ${this.rooms.size}`);
-      }
-    }, 60000); // 每60秒检查一次（减少频率，空房间不需要频繁检查）
+    // 定期健康检查（回调主体抽为 sweepRooms，测试可注入时间直接驱动）
+    // 每60秒检查一次（减少频率，空房间不需要频繁检查）
+    this.cleanupTimer = setInterval(() => this.sweepRooms(), options.cleanupIntervalMs ?? 60000);
 
     // 创建HTTP服务器用于管理API
-    const httpServer = createServer((req, res) => {
+    this.httpServer = createServer((req, res) => {
       // 设置CORS头,允许跨域请求
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -476,12 +454,96 @@ class DanmakuServer {
       }
     });
 
-    httpServer.listen(PORT + 1); // HTTP API监听8081端口
-    console.log(`[Server] Management API listening on port ${PORT + 1}`);
+    this.httpServer.listen(httpPort); // HTTP API 端口 = 弹幕端口 + 1（默认 8081）
 
-    console.log(`[Server] Danmaku server listening on port ${PORT}`);
+    // 双端口都进入监听后 ready() 才落定；监听失败会让 ready() 拒绝
+    this.readyPromise = Promise.all([
+      new Promise<void>((resolve, reject) => {
+        this.wss.once('listening', resolve);
+        this.wss.once('error', reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        this.httpServer.once('listening', resolve);
+        this.httpServer.once('error', reject);
+      }),
+    ]).then(() => {
+      console.log(`[Server] Danmaku server listening on port ${this.getWsPort()}`);
+      console.log(`[Server] Management API listening on port ${this.getHttpPort()}`);
+    });
   }
-  
+
+  /** 双端口（弹幕 WS + 管理 HTTP）均进入监听。生产入口不必等待，测试须 await */
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
+  /** 实际监听的弹幕 WebSocket 端口（配合 port: 0 使用） */
+  getWsPort(): number {
+    return (this.wss.address() as AddressInfo).port;
+  }
+
+  /** 实际监听的管理 HTTP 端口 */
+  getHttpPort(): number {
+    return (this.httpServer.address() as AddressInfo).port;
+  }
+
+  /** 停止服务：清定时器、断开所有客户端、关闭两个监听（测试 teardown 用） */
+  async close(): Promise<void> {
+    clearInterval(this.cleanupTimer);
+    // 主动断开客户端，否则 wss.close 要等客户端自行断开
+    this.wss.clients.forEach((client) => client.terminate());
+    await Promise.all([
+      new Promise<void>((resolve, reject) =>
+        this.wss.close((err) => (err ? reject(err) : resolve()))
+      ),
+      new Promise<void>((resolve, reject) =>
+        this.httpServer.close((err) => (err ? reject(err) : resolve()))
+      ),
+    ]);
+  }
+
+  /**
+   * 房间健康检查与 TTL 清扫（interval 回调主体）。
+   * 公开并接受 now 参数是为了测试能直接注入时间驱动，生产路径始终用当前时间。
+   */
+  sweepRooms(now: number = Date.now()) {
+    const toDelete: string[] = [];
+
+    this.rooms.forEach((room, roomId) => {
+      // 检查房间健康（断开死连接）
+      room.checkHealth();
+
+      const isEmpty = room.getClientCount() === 0;
+
+      if (isEmpty) {
+        // 空房间使用更长的TTL，让房主有时间回来
+        const emptySince = room.getEmptySince();
+        if (emptySince && (now - emptySince > this.EMPTY_ROOM_TTL)) {
+          console.log(`[Server] Empty room expired: ${roomId}`);
+          toDelete.push(roomId);
+          return;
+        }
+        // 非host创建的房间或超时过长的房间
+        if (now - room.createdAt > this.ROOM_TTL) {
+          console.log(`[Server] Room expired by age: ${roomId}`);
+          toDelete.push(roomId);
+          return;
+        }
+      }
+    });
+
+    // 批量删除并清理hostRooms映射
+    toDelete.forEach(roomId => {
+      this.removeFromHostRooms(roomId);
+      this.rooms.delete(roomId);
+    });
+
+    // 输出统计信息
+    if (toDelete.length > 0) {
+      console.log(`[Server] Cleaned up ${toDelete.length} rooms, remaining: ${this.rooms.size}`);
+    }
+  }
+
   // 辅助方法: 从房主列表中移除房间
   private removeFromHostRooms(roomId: string) {
     // 查找哪个用户拥有这个房间
@@ -500,5 +562,9 @@ class DanmakuServer {
   }
 }
 
-// 启动服务器
-new DanmakuServer();
+// 直接运行（node dist/server.js / ts-node src/server.ts / PM2）时自启动；被 import（测试）时不启动。
+// 注意：不得恢复无条件的顶层 new DanmakuServer()，否则测试 import 本模块就会抢占真实端口。
+// typeof require 前置判断：vitest 会把本 CJS 模块转成 ESM 执行，裸引用 require 会 ReferenceError。
+if (typeof require !== 'undefined' && require.main === module) {
+  new DanmakuServer();
+}

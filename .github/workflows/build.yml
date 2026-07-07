@@ -9,6 +9,45 @@ on:
   workflow_dispatch:
 
 jobs:
+  # 单元/集成测试（客户端 vitest + danmaku-server vitest），与双平台构建并行。
+  # release.yml 里有同款 job（发版门禁卡在 prepare 之前）；两处保持同步，不值得为此抽 composite action
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            danmaku-server/package-lock.json
+
+      - name: 安装客户端依赖
+        run: npm ci
+        env:
+          # 测试用不到 electron 二进制，跳过 ~100MB 下载
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: 客户端单元测试（vitest）
+        run: npm test
+
+      - name: 安装服务器依赖
+        run: npm ci
+        working-directory: danmaku-server
+
+      - name: 服务器编译冒烟（tsc）
+        run: npm run build
+        working-directory: danmaku-server
+
+      - name: 服务器单元与集成测试（vitest）
+        run: npm test
+        working-directory: danmaku-server
+
   build-windows:
     name: Build Windows
     runs-on: windows-latest

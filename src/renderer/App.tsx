@@ -6,6 +6,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useDanmakuStore } from './stores/danmakuStore';
 import { speakVoiceDanmaku } from './services/ttsService';
 import { botService } from './services/botService';
+import { createIncomingDanmakuHandler } from './services/incomingDanmaku';
 
 const App: React.FC = () => {
   // 获取 URL 参数
@@ -52,80 +53,22 @@ const App: React.FC = () => {
     }, 2000);
   }, []);
 
-  // 初始化网络弹幕接收回调
+  // 初始化网络弹幕接收回调（处理逻辑在 services/incomingDanmaku.ts，这里只做依赖接线）
   useEffect(() => {
     const { initCallbacks } = useConnectionStore.getState();
-    initCallbacks((danmaku, roomId, isReplay) => {
-      const { activeRoomId } = useConnectionStore.getState();
-      const { settings } = useSettingsStore.getState();
-      
-      // 添加调试日志
-      console.log(`[App] Received remote danmaku:`, {
-        text: danmaku.text.substring(0, 20),
-        sender: danmaku.sender,
-        roomId: roomId,
-        activeRoomId: activeRoomId,
-        matches: roomId === activeRoomId
-      });
-      
-      if (roomId === activeRoomId) {
-        console.log('[App] ✅ RoomId matches, adding danmaku to display');
-        
-        // 添加到当前窗口的 store
-        useDanmakuStore.getState().addDanmaku(
-          danmaku,
-          settings.fontSize,
-          settings.speed,
-          roomId,
-          danmaku.position || settings.defaultPosition,
-          danmaku.mode || settings.defaultMode,
-          settings.stayDuration
-        );
-        
-        // 语音弹幕：在 TTS 所在窗口（控制面板/兼容单窗口）于接收时直接朗读；
-        // 房间历史回放（init）不朗读，speakVoiceDanmaku 内部按 ID 去重并按发送者限频
-        const urlParams = new URLSearchParams(window.location.search);
-        const windowType = urlParams.get('window');
-        if (danmaku.isVoice && !isReplay && windowType !== 'danmaku') {
-          speakVoiceDanmaku(danmaku, settings);
-        }
-
-        // 吐槽姬关键词观察：只在控制面板/单窗口运行（botService 内部还有 running/去重/冷却守卫）
-        if (windowType !== 'danmaku') {
-          botService.onIncomingDanmaku(danmaku, roomId, !!isReplay);
-        }
-
-        // 如果当前是控制面板窗口，转发到弹幕窗口
-        if (windowType === 'control') {
-          console.log('[App] Forwarding remote danmaku to danmaku window via IPC');
-          try {
-            window.electronAPI?.forwardDanmakuToWindow({
-              message: danmaku,
-              fontSize: settings.fontSize,
-              speed: settings.speed,
-              position: danmaku.position || settings.defaultPosition,
-              mode: danmaku.mode || settings.defaultMode,
-              stayDuration: settings.stayDuration
-            });
-            console.log('[App] ✅ Successfully forwarded remote danmaku');
-          } catch (error) {
-            console.error('[App]  Failed to forward remote danmaku:', error);
-          }
-        }
-      } else {
-        console.log('[App] ❌ RoomId mismatch, only adding to history');
-        const { addHistory } = useDanmakuStore.getState();
-        addHistory({
-          id: danmaku.id,
-          text: danmaku.text,
-          sender: danmaku.sender || '匿名用户',
-          color: danmaku.color,
-          timestamp: danmaku.timestamp,
-          roomId,
-          isVoice: danmaku.isVoice,
-        });
-      }
-    });
+    initCallbacks(createIncomingDanmakuHandler({
+      windowType,
+      getActiveRoomId: () => useConnectionStore.getState().activeRoomId,
+      getSettings: () => useSettingsStore.getState().settings,
+      addDanmaku: (message, fontSize, speed, roomId, position, mode, stayDuration) =>
+        useDanmakuStore.getState().addDanmaku(message, fontSize, speed, roomId, position, mode, stayDuration),
+      addHistory: (item) => useDanmakuStore.getState().addHistory(item),
+      speakVoice: speakVoiceDanmaku,
+      notifyBot: (message, roomId, isReplay) => botService.onIncomingDanmaku(message, roomId, isReplay),
+      forwardToDanmakuWindow: window.electronAPI
+        ? (payload) => window.electronAPI.forwardDanmakuToWindow(payload)
+        : undefined,
+    }));
   }, []);
 
   // 监听来自控制面板的弹幕消息

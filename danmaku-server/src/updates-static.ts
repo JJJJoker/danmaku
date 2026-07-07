@@ -16,8 +16,11 @@ import * as path from 'path';
  * - latest*.yml 必须 no-cache（发新版后客户端立刻看到）；其余文件名含版本号，天然不可变
  */
 
-// 更新资产目录，与 deploy.sh / ecosystem.config.js 的约定保持一致
-const UPDATES_DIR = process.env.UPDATES_DIR || '/opt/danmaku-server/updates';
+// 更新资产目录，与 deploy.sh / ecosystem.config.js 的约定保持一致。
+// 调用时求值而非模块加载时快照：生产下 env 在进程启动即已固定，行为不变；测试可 import 后再注入 UPDATES_DIR
+function getUpdatesDir(): string {
+  return process.env.UPDATES_DIR || '/opt/danmaku-server/updates';
+}
 
 // 文件名白名单：字母数字开头，仅允许字母/数字/._-，天然拒绝路径分隔符、隐藏文件与空名
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -80,7 +83,7 @@ export async function serveUpdateFile(
       notFound(res);
       return;
     }
-    const baseDir = path.resolve(UPDATES_DIR);
+    const baseDir = path.resolve(getUpdatesDir());
     const filePath = path.resolve(baseDir, name);
     if (!filePath.startsWith(baseDir + path.sep)) {
       notFound(res);
