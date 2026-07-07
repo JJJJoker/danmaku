@@ -30,7 +30,12 @@ npm run test:coverage    # 带覆盖率
 
 # 服务器
 cd danmaku-server && npm test     # 或 npm run test:watch
+
+# 一键全量验收流水线（两端测试 + tsc 基线比对 + build:vite，支持 --client/--server/--types/--build 组合）
+bash .claude/skills/test/check.sh
 ```
+
+> 用 Claude Code 开发时对应 `/test` skill（本地 skill，不随仓库分发）；无该 skill 的环境按上面命令手动跑。
 
 本机是 headless Linux 跑不了 Electron GUI，但 **vitest 测试完全可以本机直接跑**——这是本仓库无头环境下最主要的自动化验收手段。
 
@@ -79,7 +84,7 @@ cd danmaku-server && npm test     # 或 npm run test:watch
 vitest 是新增的一环，**不替代**原有验证，改完代码的完整验收顺序：
 
 1. `npm test`（根 + danmaku-server，两边全绿）；
-2. `npx tsc -p tsconfig.json --noEmit` 与基线比对（3 条历史遗留错误，验"无新增"；**按错误内容比对而非行号**——行号会随代码增删漂移。可用 `/type-check` skill）；
+2. `npx tsc -p tsconfig.json --noEmit` 与基线比对（3 条历史遗留错误，验"无新增"；**按错误内容比对而非行号**——行号会随代码增删漂移。可用 `/test` skill 的 `--types` 阶段自动比对）；
 3. `npm run build:vite` 编译通过；
 4. 涉及 GUI 的改动：手动验证步骤写进 docs/ 报告，由用户在桌面端执行（headless 限制只针对 Electron GUI）。
 
