@@ -104,7 +104,9 @@ jobs:
             echo "--- pm2 / node 版本"; npx pm2 --version; node --version
             echo "--- 新代码就位检查（dist/app.js 应存在）"; ls -l dist/app.js || echo "app.js 缺失 = 部署的是旧代码"
             echo "--- 模块加载测试（glibc/ABI 不兼容会在此打印报错）"
-            node -e "require(\"./dist/app.js\"); console.log(\"app.js 可加载，better-sqlite3 正常\")" || true
+            node -e "require(\"./dist/app.js\"); console.log(\"app.js JS 层可加载\")" || true
+            # better-sqlite3 的原生绑定是懒加载：bare require 不碰 .node 文件，必须构造 Database 才真加载
+            node -e "const D=require(\"better-sqlite3\"); new D(\"/tmp/deploy-abi-test.db\").exec(\"CREATE TABLE IF NOT EXISTS t(x)\"); console.log(\"better-sqlite3 原生绑定 OK\")" || true
             echo "--- 应用日志（最近 30 行）"; npx pm2 logs danmaku-server --lines 30 --nostream || true
             echo "--- pm2 守护进程日志（启动期异常记在这里）"; tail -40 ~/.pm2/pm2.log || true
           ' || true
