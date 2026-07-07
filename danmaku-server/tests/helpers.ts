@@ -1,6 +1,6 @@
 // 集成测试辅助：起临时端口服务器 + 真实 ws 客户端（带消息队列）
 import { WebSocket } from 'ws';
-import { DanmakuServer, DanmakuServerOptions } from '../src/server';
+import { DanmakuServer, DanmakuServerOptions } from '../src/app';
 
 /**
  * 启动一个测试服务器：port 0 由内核分配临时端口（避免 CI 端口冲突），

@@ -1,7 +1,7 @@
 // DanmakuServer 集成测试：真实 ws 客户端连临时端口（port 0），不 mock 被测系统内部。
 // 时间相关（TTL 清扫）不 sleep，直接调用 sweepRooms(now) 注入时间驱动。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { DanmakuServer } from '../src/server';
+import { DanmakuServer } from '../src/app';
 import { startServer, connect, join, fetchStats, waitUntil, TestClient } from './helpers';
 
 /** 等待某房间人数在服务器端达到期望值（leave/断线是异步生效的） */

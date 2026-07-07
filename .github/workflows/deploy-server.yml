@@ -96,8 +96,16 @@ jobs:
             fi
             echo "第 $i 次探测未通过，重试..."
           done
-          echo "::error::部署后 /stats 探测失败，最近日志如下（完整日志登录服务器 npx pm2 logs danmaku-server）"
-          # 把 pm2 近期日志带回 CI 输出，区分「崩溃循环」与「进程在但没监听」两类故障
-          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes "$SSH_USER@$SSH_HOST" \
-            "npx pm2 logs danmaku-server --lines 30 --nostream" || true
+          echo "::error::部署后 /stats 探测失败，以下为远端诊断信息"
+          # 一次带回全部诊断：版本、代码新旧、原生模块可加载性（glibc/ABI）、应用日志、pm2 守护进程日志。
+          # 加载 dist/app.js 只 require 实现（含 better-sqlite3），不会启动服务，无副作用
+          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes "$SSH_USER@$SSH_HOST" '
+            cd /opt/danmaku-server
+            echo "--- pm2 / node 版本"; npx pm2 --version; node --version
+            echo "--- 新代码就位检查（dist/app.js 应存在）"; ls -l dist/app.js || echo "app.js 缺失 = 部署的是旧代码"
+            echo "--- 模块加载测试（glibc/ABI 不兼容会在此打印报错）"
+            node -e "require(\"./dist/app.js\"); console.log(\"app.js 可加载，better-sqlite3 正常\")" || true
+            echo "--- 应用日志（最近 30 行）"; npx pm2 logs danmaku-server --lines 30 --nostream || true
+            echo "--- pm2 守护进程日志（启动期异常记在这里）"; tail -40 ~/.pm2/pm2.log || true
+          ' || true
           exit 1

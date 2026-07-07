@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { DanmakuServer } from '../src/server';
+import { DanmakuServer } from '../src/app';
 import { startServer } from './helpers';
 
 let server: DanmakuServer;
