@@ -17,3 +17,6 @@ electron.zip
 
 # 测试覆盖率报告
 coverage/
+
+# 服务器本地运行产生的 SQLite 持久化文件
+danmaku-server/danmaku.db*

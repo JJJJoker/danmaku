@@ -1,0 +1,91 @@
+name: Deploy Server
+
+# 服务端手动部署：测试门禁 → CI 构建 dist → rsync 上传 → 远端装生产依赖 → npx pm2 重启 → /stats 自检。
+# 仅 workflow_dispatch 手动触发（重启会断开在线连接；房间状态已持久化到 SQLite 且客户端会自动重连，
+# 用户基本无感，但仍建议低峰操作。稳定后如需改为合并自动部署，加 push+paths 触发即可）。
+# 复用 release.yml 更新源同步的同一套 SSH secrets。
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy danmaku-server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: danmaku-server/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+        working-directory: danmaku-server
+
+      - name: 测试门禁（挂了不部署）
+        run: npm test
+        working-directory: danmaku-server
+
+      - name: 构建 dist
+        run: npm run build
+        working-directory: danmaku-server
+
+      - name: 配置 SSH
+        env:
+          UPDATE_SSH_KEY: ${{ secrets.UPDATE_SSH_KEY }}
+          UPDATE_SSH_KNOWN_HOSTS: ${{ secrets.UPDATE_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$UPDATE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # host key 由运维一次性 ssh-keyscan 产出存 secret（见 danmaku-server/DEPLOYMENT.md），CI 不做 TOFU
+          printf '%s\n' "$UPDATE_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: 上传代码并重启服务
+        env:
+          SSH_HOST: ${{ secrets.UPDATE_SSH_HOST }}
+          SSH_USER: ${{ secrets.UPDATE_SSH_USER }}
+          SSH_PORT: ${{ secrets.UPDATE_SSH_PORT }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          DEST="$SSH_USER@$SSH_HOST"
+          DIR=/opt/danmaku-server
+          RSH="ssh -p $PORT -o BatchMode=yes"
+          # --delete 只作用于 dist/ 内部（清掉改名/删除的旧编译产物）；
+          # 不触碰同级的 updates/（发版资产）、danmaku.db*（房间持久化）、
+          # node_modules/、ecosystem.config.js（首次部署由 deploy.sh 生成）
+          rsync -av --delete -e "$RSH" danmaku-server/dist/ "$DEST:$DIR/dist/"
+          rsync -av -e "$RSH" danmaku-server/package.json danmaku-server/package-lock.json "$DEST:$DIR/"
+          # 生产依赖含 better-sqlite3 原生模块，必须在服务器本机安装（prebuild 按平台分发，
+          # 预编译下载失败会回退 node-gyp 编译，届时需要服务器装 build-essential + python3）
+          $RSH "$DEST" "cd $DIR && npm ci --omit=dev && npx pm2 restart danmaku-server"
+
+      - name: 部署后自检
+        env:
+          SSH_HOST: ${{ secrets.UPDATE_SSH_HOST }}
+          SSH_USER: ${{ secrets.UPDATE_SSH_USER }}
+          SSH_PORT: ${{ secrets.UPDATE_SSH_PORT }}
+        run: |
+          # 经 SSH 在服务器本机探测 /stats（不依赖 8081 对 CI 出口可达）
+          for i in 1 2 3 4 5; do
+            sleep 3
+            if ssh -p "${SSH_PORT:-22}" -o BatchMode=yes "$SSH_USER@$SSH_HOST" \
+                 "curl -fsS --max-time 5 http://127.0.0.1:8081/stats" > stats.json 2>/dev/null; then
+              echo "服务已恢复，/stats："
+              cat stats.json
+              exit 0
+            fi
+            echo "第 $i 次探测未通过，重试..."
+          done
+          echo "::error::部署后 /stats 探测失败，请登录服务器执行 npx pm2 logs danmaku-server 排查"
+          exit 1

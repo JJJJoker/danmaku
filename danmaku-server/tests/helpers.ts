@@ -12,6 +12,7 @@ export async function startServer(options: DanmakuServerOptions = {}): Promise<D
     port: 0,
     httpPort: 0,
     resolveClientIp: (req) => String(req.headers['x-test-ip'] ?? '127.0.0.1'),
+    dbPath: ':memory:', // 默认不落盘；持久化测试显式传临时文件路径
     ...options,
   });
   await server.ready();

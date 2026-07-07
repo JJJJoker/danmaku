@@ -8,6 +8,14 @@ interface ClientInfo {
   lastHeartbeat: number;
 }
 
+/** 从 SQLite 恢复房间时的初始状态（服务重启后由 DanmakuServer 传入） */
+export interface RoomRestoreState {
+  createdAt: number;
+  password: string;
+  hostUserId: string;
+  emptySince: number | null;
+}
+
 export class Room {
   private clients: Map<string, ClientInfo> = new Map();
   readonly roomId: string;
@@ -16,8 +24,14 @@ export class Room {
   private hostUserId: string = '';  // 房主userId
   private emptySince: number | null = null;  // 房间变空的时间戳
 
-  constructor(roomId: string) {
+  constructor(roomId: string, restore?: RoomRestoreState) {
     this.roomId = roomId;
+    if (restore) {
+      this.createdAt = restore.createdAt;
+      this.password = restore.password;
+      this.hostUserId = restore.hostUserId;
+      this.emptySince = restore.emptySince;
+    }
   }
   
   setHost(userId: string) {

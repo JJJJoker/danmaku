@@ -2,9 +2,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
 import { createServer, Server as HttpServer } from 'http';
 import { AddressInfo } from 'net';
+import * as path from 'path';
 import { Room } from './room';
 import { ServerMessage } from './types';
 import { isUpdatesRequest, serveUpdateFile } from './updates-static';
+import { RoomStore } from './persistence';
 
 // 可测性注入点：写死的常量一律走构造参数（默认值 = 生产行为），详见 docs/TESTING_GUIDELINES.md
 export interface DanmakuServerOptions {
@@ -19,6 +21,11 @@ export interface DanmakuServerOptions {
   cleanupIntervalMs?: number;
   /** 客户端 IP 解析函数；默认取 socket.remoteAddress，测试可改从自定义 header 读取以模拟多 IP */
   resolveClientIp?: (req: IncomingMessage) => string;
+  /**
+   * SQLite 持久化文件路径；默认 env DANMAKU_DB_PATH，缺省为 dist 同级的 danmaku.db
+   * （部署目录 /opt/danmaku-server/danmaku.db）。测试传 ':memory:'
+   */
+  dbPath?: string;
 }
 
 export class DanmakuServer {
@@ -27,6 +34,7 @@ export class DanmakuServer {
   private cleanupTimer: NodeJS.Timeout;
   private readyPromise: Promise<void>;
   private resolveClientIp: (req: IncomingMessage) => string;
+  private store: RoomStore;
   private rooms: Map<string, Room> = new Map();
   
   // 新增: 用户会话映射 userId -> { ws, roomId }
@@ -52,6 +60,12 @@ export class DanmakuServer {
     this.MAX_ROOMS_PER_HOST = options.maxRoomsPerHost ?? 2;
     this.resolveClientIp = options.resolveClientIp ??
       ((req) => req.socket.remoteAddress?.replace('::ffff:', '') || 'unknown');
+
+    // SQLite 持久化：房间元数据 + IP→userId 映射跨重启存活，部署重启对用户无感
+    const dbPath = options.dbPath ?? process.env.DANMAKU_DB_PATH ??
+      (typeof __dirname !== 'undefined' ? path.join(__dirname, '..', 'danmaku.db') : 'danmaku.db');
+    this.store = new RoomStore(dbPath);
+    this.restoreFromStore();
 
     this.wss = new WebSocketServer({ port });
     
@@ -84,11 +98,13 @@ export class DanmakuServer {
                 // 客户端提供的 ID 未被占用，使用它
                 userId = providedUserId;
                 this.ipToUserId.set(clientIp, userId);
+                this.store.upsertIpUser(clientIp, userId);
                 console.log(`[Server] IP ${clientIp} -> adopted provided userId: ${userId}`);
               } else {
                 // 生成新 ID
                 userId = `u${Math.random().toString(36).substring(2, 8)}`;
                 this.ipToUserId.set(clientIp, userId);
+                this.store.upsertIpUser(clientIp, userId);
                 console.log(`[Server] IP ${clientIp} -> new userId: ${userId}`);
               }
               
@@ -103,11 +119,12 @@ export class DanmakuServer {
                   if (oldRoom) {
                     console.log(`[Server] User ${userId} switching rooms, removing from ${existingSession.roomId}`);
                     oldRoom.removeClient(userId);
-                    
+
                     // 不清理空房间 - 保留房主的房间记录，让用户可以回来
                     if (oldRoom.getClientCount() === 0) {
                       console.log(`[Server] Room ${existingSession.roomId} is now empty but kept for host ${userId}`);
                       oldRoom.markEmpty(); // 标记为空房间，开始计时
+                      this.store.setRoomEmptySince(existingSession.roomId, oldRoom.getEmptySince());
                     }
                   }
                 }
@@ -174,7 +191,15 @@ export class DanmakuServer {
                   this.hostRooms.set(userId, []);
                 }
                 this.hostRooms.get(userId)!.push(roomId);
-                
+
+                this.store.upsertRoom({
+                  roomId,
+                  createdAt: room.createdAt,
+                  password: room.getPassword(),
+                  hostUserId: userId,
+                  emptySince: null,
+                });
+
                 console.log(`[Server] Room created: ${roomId} by ${userId} (${this.rooms.size}/${this.MAX_ROOMS}, user rooms: ${this.hostRooms.get(userId)!.length}/${this.MAX_ROOMS_PER_HOST})`);
               }
               
@@ -207,9 +232,10 @@ export class DanmakuServer {
                 break;
               }
               
-              // 添加客户端到房间
+              // 添加客户端到房间（emptySince 归零，持久化同步）
               currentRoom.addClient(ws, userId, username);
-              
+              this.store.setRoomEmptySince(roomId, null);
+
               // 更新用户会话
               this.userSessions.set(userId, { ws, roomId });
               
@@ -251,6 +277,7 @@ export class DanmakuServer {
                 if (currentRoom.getClientCount() === 0) {
                   console.log(`[Server] Room ${roomId} is now empty after leave but kept for host`);
                   currentRoom.markEmpty(); // 标记为空房间
+                  this.store.setRoomEmptySince(roomId, currentRoom.getEmptySince());
                 }
                 
                 currentRoom = null;
@@ -279,6 +306,8 @@ export class DanmakuServer {
                 break;
               }
               
+              this.store.setRoomPassword(pwdRoomId, newPassword);
+
               console.log(`[Server] Password changed for room: ${pwdRoomId}, hasPassword: ${targetRoom.hasPassword()}`);
               
               // 广播密码变更通知
@@ -341,9 +370,10 @@ export class DanmakuServer {
               
               // 从房主列表中移除
               this.removeFromHostRooms(deleteRoomId);
-              
-              // 删除房间
+
+              // 删除房间（持久化同步，重启不复活）
               this.rooms.delete(deleteRoomId);
+              this.store.deleteRoom(deleteRoomId);
               
               ws.send(JSON.stringify({
                 type: 'success',
@@ -374,6 +404,7 @@ export class DanmakuServer {
             if (currentRoom.getClientCount() === 0) {
               console.log(`[Server] Room ${roomId} is now empty after close but kept for host`);
               currentRoom.markEmpty(); // 标记为空房间
+              this.store.setRoomEmptySince(roomId, currentRoom.getEmptySince());
             }
           }
           
@@ -471,6 +502,33 @@ export class DanmakuServer {
     });
   }
 
+  /** 启动时从 SQLite 恢复房间与身份映射（部署/崩溃重启对用户无感的关键） */
+  private restoreFromStore() {
+    this.ipToUserId = this.store.loadIpUserMap();
+    const persisted = this.store.loadRooms();
+    for (const p of persisted) {
+      const room = new Room(p.roomId, {
+        createdAt: p.createdAt,
+        password: p.password,
+        hostUserId: p.hostUserId,
+        // 重启后房间必然无人：关机前有人的房间（无 emptySince）从现在起算 24h 保留
+        emptySince: p.emptySince ?? Date.now(),
+      });
+      this.rooms.set(p.roomId, room);
+      if (p.hostUserId) {
+        const list = this.hostRooms.get(p.hostUserId) || [];
+        list.push(p.roomId);
+        this.hostRooms.set(p.hostUserId, list);
+      }
+      if (p.emptySince === null) {
+        this.store.setRoomEmptySince(p.roomId, room.getEmptySince());
+      }
+    }
+    if (persisted.length > 0 || this.ipToUserId.size > 0) {
+      console.log(`[Server] Restored ${persisted.length} room(s), ${this.ipToUserId.size} known IP(s) from SQLite`);
+    }
+  }
+
   /** 双端口（弹幕 WS + 管理 HTTP）均进入监听。生产入口不必等待，测试须 await */
   ready(): Promise<void> {
     return this.readyPromise;
@@ -499,6 +557,7 @@ export class DanmakuServer {
         this.httpServer.close((err) => (err ? reject(err) : resolve()))
       ),
     ]);
+    this.store.close();
   }
 
   /**
@@ -520,6 +579,7 @@ export class DanmakuServer {
         // 补记为从现在起算，下一轮清扫按 24h 规则处理
         if (!emptySince) {
           room.markEmpty();
+          this.store.setRoomEmptySince(roomId, room.getEmptySince());
           return;
         }
         // 空房间保留 24 小时后销毁，期间房主可随时回来（房间 ID/密码不变）。
@@ -533,10 +593,11 @@ export class DanmakuServer {
       }
     });
 
-    // 批量删除并清理hostRooms映射
+    // 批量删除并清理hostRooms映射（持久化同步）
     toDelete.forEach(roomId => {
       this.removeFromHostRooms(roomId);
       this.rooms.delete(roomId);
+      this.store.deleteRoom(roomId);
     });
 
     // 输出统计信息
