@@ -251,6 +251,10 @@ pm2 flush
 
 ### 更新服务
 
+**推荐方式：GitHub Actions 一键部署**。仓库 Actions 页手动运行 **Deploy Server** workflow（`deploy-server.yml`）：自动跑测试门禁 → CI 编译 dist → rsync 上传 → 服务器装生产依赖 → `npx pm2 restart` → `/stats` 自检。复用更新源同步的同一套 SSH secrets，无需额外配置。
+
+手动方式（备用）：
+
 ```bash
 # 1. 上传新代码到服务器
 # 2. SSH登录服务器
@@ -259,15 +263,18 @@ ssh <用户>@<你的服务器IP>
 # 3. 进入项目目录
 cd /opt/danmaku-server
 
-# 4. 重新编译
+# 4. 安装依赖并重新编译（依赖含 better-sqlite3 原生模块，须在服务器本机安装）
+npm ci
 npm run build
 
 # 5. 重启服务
-pm2 restart danmaku-server
+npx pm2 restart danmaku-server
 
 # 6. 验证新版本
-pm2 logs danmaku-server
+npx pm2 logs danmaku-server
 ```
+
+**房间状态持久化**：房间元数据（房间 ID/密码/房主/空置计时）与 IP→用户身份映射保存在 SQLite 文件 `/opt/danmaku-server/danmaku.db`（可用环境变量 `DANMAKU_DB_PATH` 覆盖），**重启/部署不丢房间**——客户端自动重连后原样回归，部署对用户基本无感。该文件（连同 `-wal`/`-shm`）不要删除；部署 workflow 的 rsync 不会触碰它。弹幕内容与历史仍不持久化（设计如此）。
 
 ---
 

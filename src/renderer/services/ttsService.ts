@@ -11,7 +11,7 @@ interface QueueItem {
   volume: number;
 }
 
-class TTSService {
+export class TTSService {
   private synth: SpeechSynthesis | null = null;
   private queue: QueueItem[] = [];
   private speaking = false;
@@ -210,4 +210,10 @@ export function speakVoiceDanmaku(
     volume: settings.voiceVolume,
     timestamp: message.timestamp,
   });
+}
+
+/** 仅供测试：清空语音弹幕去重/限频的模块级状态，生产代码不得调用 */
+export function __resetVoiceDanmakuStateForTests(): void {
+  spokenIds.clear();
+  lastSpokenAtBySender.clear();
 }

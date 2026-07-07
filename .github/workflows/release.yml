@@ -2,7 +2,7 @@ name: Release
 
 # 合并即发版：push 到 main 时若 package.json 版本号没有对应的已发布 Release，
 # 自动打 tag → 建草稿 Release → 双平台构建上传 → 资产齐全后草稿翻正式。
-# 日常合并不改版本号时，只有 prepare 一个 job 跑几秒即结束。
+# 所有 job 都在 test 之后（测试红 = 不发版）；日常合并不改版本号时，跑完测试后 prepare 几秒即结束。
 on:
   push:
     branches: [main]
@@ -17,8 +17,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 发版门禁：测试挂了就不打 tag、不建草稿、不发版。
+  # 与 build.yml 的 test job 同款，两处保持同步（不值得为此抽 composite action）
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            danmaku-server/package-lock.json
+
+      - name: 安装客户端依赖
+        run: npm ci
+        env:
+          # 测试用不到 electron 二进制，跳过 ~100MB 下载
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: 客户端单元测试（vitest）
+        run: npm test
+
+      - name: 安装服务器依赖
+        run: npm ci
+        working-directory: danmaku-server
+
+      - name: 服务器编译冒烟（tsc）
+        run: npm run build
+        working-directory: danmaku-server
+
+      - name: 服务器单元与集成测试（vitest）
+        run: npm test
+        working-directory: danmaku-server
+
   prepare:
     name: Prepare release
+    # 必须卡在 prepare 之前：prepare 会打 tag、建草稿 Release，测试红了不能把坏 commit 定格进 tag
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
