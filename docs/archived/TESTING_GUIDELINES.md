@@ -1,6 +1,8 @@
 # 测试编写规范与流程
 
-> 本文档是**活文档**：约定变化时直接更新本文，不做存档。首次建立于 2026-07-07（客户端 + danmaku-server 全面接入 vitest）。
+- **日期**：2026-07-07（vitest 全面接入随 `c1c7365` 落地，本文随约定变化持续更新）
+- **分支**：`dev`
+- **性质**：功能设计/实现文档存档（同 `AUTO_UPDATE_RELEASE_GUIDE.md`，属长期有效的操作指南），也是后续开发写测试的**规范依据**——约定变化时直接更新本文
 
 ## 1. 技术选型
 
@@ -97,3 +99,20 @@ vitest 是新增的一环，**不替代**原有验证，改完代码的完整验
 | 服务器 | room（单元）/ server（集成）/ updates-static（集成） | 59 |
 
 **有意不测**（性价比低，留待将来）：connectionStore 的 createRoom/joinRoom/switchRoom 完整网络编排流、React 组件渲染层、main 进程（updater/IPC，依赖 Electron 运行时）。
+
+## 9. 落地文件清单（2026-07-07 接入时的修改文件表）
+
+| 文件 | 改动 |
+|------|------|
+| `vitest.config.ts`、`src/test/setup.ts` | 新建：客户端 vitest 配置与全局 setup |
+| `danmaku-server/vitest.config.ts`、`danmaku-server/tests/`（helpers + 3 个测试文件） | 新建：服务器测试基础设施 |
+| `src/renderer/**/*.test.ts`（7 个） | 新建：客户端测试 |
+| `danmaku-server/src/server.ts` | 可测性重构：导出 class、`require.main` 入口守卫、`DanmakuServerOptions` 注入、ready/close/getPort/sweepRooms(now)、删重复 ping 死分支 |
+| `danmaku-server/src/updates-static.ts` | `UPDATES_DIR` 改调用时求值 |
+| `src/renderer/services/ttsService.ts` | 导出 `TTSService` 类 + `__resetVoiceDanmakuStateForTests` 钩子 |
+| `src/renderer/services/incomingDanmaku.ts` + `App.tsx` | 接收回调抽为 DI 工厂，App 只接线 |
+| `package.json` ×2 | 新增 vitest 依赖与 test/test:watch(/coverage) 脚本 |
+| `.github/workflows/build.yml`、`release.yml` | 新增 Test job；release 的 `prepare` needs test（发版门禁） |
+| `check-errors.js` | 删除（引用已移除的 peerService，已死） |
+
+验证结论（接入当日）：两端 168 例全绿；tsc 与基线比对无新增错误（仍为 3 条历史遗留）；`npm run build:vite` 与服务器 tsc 构建通过；`node dist/server.js` 入口守卫冒烟正常。
