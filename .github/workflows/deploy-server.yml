@@ -39,14 +39,26 @@ jobs:
         run: npm run build
         working-directory: danmaku-server
 
-      # 生产依赖在 CI 侧装好、随 rsync 整体同步：服务器直连 GitHub（better-sqlite3 预编译包）
-      # 和 nodejs.org（node-gyp 回退编译所需 headers）均超时，且服务器 Python 3.6 跑不动 node-gyp 10，
-      # 在服务器本机 npm ci 必然失败（2026-07-07 首次部署即栽在这）。
-      # CI runner 与服务器同为 linux x64 + Node 20（ABI 一致），预编译二进制可直接使用；
-      # 服务器升级 Node 大版本时，上面 setup-node 的 node-version 必须同步，否则原生模块 ABI 不匹配
-      - name: 精简为生产依赖（CI 侧安装，服务器免外网）
-        run: npm ci --omit=dev
-        working-directory: danmaku-server
+      # 生产依赖在 CI 侧装好、随 rsync 整体同步：服务器直连 GitHub/nodejs.org 均超时，
+      # 且服务器 Python 3.6 跑不动 node-gyp 10，在服务器本机 npm ci 必然失败（2026-07-07 部署事故之一）。
+      # better-sqlite3 必须在 rockylinux:8 容器内【源码编译】：官方预编译包要求 glibc ≥2.38，
+      # 服务器（Alibaba Cloud Linux 8）只有 2.28，直接用预编译包会启动即 ERR_DLOPEN——
+      # 而 pm2 cluster 把这种启动期异常记成 code 0 干净退出、应用日志零输出，极难定位
+      # （2026-07-07 部署事故之二，勿回退成 runner 上直接 npm ci）。
+      # 容器 nodejs:20 模块流与服务器 Node 20 同 ABI；服务器升级 Node 大版本时此处须同步。
+      # 末尾构造 Database 是防回归自检：在 glibc 2.28 下真实加载原生绑定（懒加载，bare require 测不到），
+      # 编译产物不兼容当场红，不带病 rsync
+      - name: 精简为生产依赖（rockylinux:8 容器内源码编译，匹配服务器 glibc 2.28）
+        run: |
+          docker run --rm -v "$PWD/danmaku-server:/work" -w /work rockylinux:8 bash -euc '
+            dnf -y -q module enable nodejs:20
+            dnf -y -q install nodejs npm python3.11 gcc-toolset-12-gcc-c++ make >/dev/null
+            source /opt/rh/gcc-toolset-12/enable
+            export npm_config_python=python3.11
+            export npm_config_build_from_source=true
+            npm ci --omit=dev
+            node -e "const D=require(\"better-sqlite3\"); new D(\"/tmp/t.db\").exec(\"CREATE TABLE t(x)\"); console.log(\"better-sqlite3 源码编译产物在 glibc \" + process.report.getReport().header.glibcVersionRuntime + \" 下加载 OK\")"
+          '
 
       - name: 配置 SSH
         env:
