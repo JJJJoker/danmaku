@@ -404,18 +404,22 @@ describe('房间 TTL 清扫（sweepRooms 注入时间驱动）', () => {
     expect(stats.hostRooms).toEqual({});
   });
 
-  it('空房间房龄超 1h 即被清理——EMPTY_ROOM_TTL 对超龄空房不生效（钉住现状）', async () => {
-    // 潜在 bug（待决，勿顺手修）：清扫里"房龄 > ROOM_TTL(1h) 即删"的分支对空房无条件生效，
-    // 导致"空房保留 24h 等房主回来"的意图只对房龄 1h 内的房间成立。修复属行为变更，另行提案。
+  it('空房间在 24h 内保留（房龄超 1h 也不删，房主可回来）', async () => {
     const a = await client('10.0.0.1');
     await join(a, 'room1', { userId: 'alice', isCreate: true });
     a.send({ type: 'leave', payload: { userId: 'alice' } });
     await waitClientCount('room1', 0);
 
-    server.sweepRooms(Date.now() + 2 * 3600 * 1000); // 空了才 2h（< 24h），但房龄已超 1h
+    server.sweepRooms(Date.now() + 2 * 3600 * 1000); // 空置 2h（< 24h），不清理
 
     const stats = await fetchStats(server.getHttpPort());
-    expect(stats.totalRooms).toBe(0);
+    expect(stats.totalRooms).toBe(1);
+
+    // 且房主仍可免密回到自己的房间
+    const a2 = await client('10.0.0.1');
+    const res = await join(a2, 'room1', { userId: 'alice' });
+    expect(res.type).toBe('joinSuccess');
+    expect(res.payload.isHost).toBe(true);
   });
 
   it('有成员的房间即使超龄也不清理', async () => {

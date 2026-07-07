@@ -145,7 +145,7 @@ describe('addLog / clearLogs', () => {
     expect(useConnectionStore.getState().logs).toHaveLength(0);
   });
 
-  it('日志上限按现状封顶 51 条（slice(-50) 后再追加 1 条，钉住现状）', () => {
+  it('日志上限封顶 51 条（slice(-50) 后再追加 1 条，2026-07 已确认保持此行为）', () => {
     const logs = Array.from({ length: 60 }, (_, i) => `旧日志${i}`);
     useConnectionStore.setState({ rooms: { r1: roomState({ logs }) }, activeRoomId: 'r1' });
 

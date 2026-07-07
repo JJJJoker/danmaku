@@ -41,8 +41,7 @@ export class DanmakuServer {
   // 房间配置（上限类可经构造参数覆盖，默认值即生产值）
   private readonly MAX_ROOMS: number; // 最大房间数，默认100
   private readonly MAX_USERS_PER_ROOM: number; // 每个房间最大用户数，默认50
-  private readonly ROOM_TTL = 3600000; // 房间存活时间(1小时)
-  private readonly EMPTY_ROOM_TTL = 86400000; // 空房间存活时间(24小时) - 房主创建的房间保留更久
+  private readonly EMPTY_ROOM_TTL = 86400000; // 空房间保留时长(24小时)，到期销毁——孤儿房间的兜底回收
   private readonly MAX_ROOMS_PER_HOST: number; // 每个用户最多创建的房间数，默认2
 
   constructor(options: DanmakuServerOptions = {}) {
@@ -516,16 +515,18 @@ export class DanmakuServer {
       const isEmpty = room.getClientCount() === 0;
 
       if (isEmpty) {
-        // 空房间使用更长的TTL，让房主有时间回来
         const emptySince = room.getEmptySince();
-        if (emptySince && (now - emptySince > this.EMPTY_ROOM_TTL)) {
-          console.log(`[Server] Empty room expired: ${roomId}`);
-          toDelete.push(roomId);
+        // 经健康检查剔除最后一人的房间没有 emptySince（leave/close/切房路径才会 markEmpty），
+        // 补记为从现在起算，下一轮清扫按 24h 规则处理
+        if (!emptySince) {
+          room.markEmpty();
           return;
         }
-        // 非host创建的房间或超时过长的房间
-        if (now - room.createdAt > this.ROOM_TTL) {
-          console.log(`[Server] Room expired by age: ${roomId}`);
+        // 空房间保留 24 小时后销毁，期间房主可随时回来（房间 ID/密码不变）。
+        // 自动销毁是孤儿房间的兜底回收：userId 按 IP 分配，用户 IP 变化后
+        // 旧房间无法再从界面手动删除，只能靠这里清理（规则已写入 README 用户说明）
+        if (now - emptySince > this.EMPTY_ROOM_TTL) {
+          console.log(`[Server] Empty room expired: ${roomId}`);
           toDelete.push(roomId);
           return;
         }

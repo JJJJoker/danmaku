@@ -229,15 +229,15 @@ describe('cleanup / updateConfig / clear', () => {
     expect(item.speed).toBeCloseTo(960 / 7, 5);
   });
 
-  it('clear 清空所有滚动轨道；staySlots 不清（钉住现状，勿顺手修）', () => {
+  it('clear 清空滚动轨道与停留槽位，清屏后停留弹幕从槽 0 重新分配', () => {
     const engine = new DanmakuEngine(12, 1920);
     engine.processDanmaku(msg(), 24, 'normal', 'top');
-    engine.processDanmaku(msg(), 24, 'normal', 'top', 'stay', 5000);
+    for (let i = 0; i < 3; i++) engine.processDanmaku(msg(), 24, 'normal', 'top', 'stay', 5000); // 占到槽 2
 
     engine.clear();
 
     expect((engine as any).tracks.get(0)).toHaveLength(0);
-    // 现状：clear() 只遍历 tracks，停留槽位残留（影响后续 stay 槽分配的判断基准）
-    expect((engine as any).staySlots.get('top')).toHaveLength(1);
+    const next = engine.processDanmaku(msg(), 24, 'normal', 'top', 'stay', 5000);
+    expect(next.trackId).toBe(0); // 槽位记录已清，不再跳过"被占"的旧槽
   });
 });

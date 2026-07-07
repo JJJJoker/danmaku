@@ -246,11 +246,12 @@ export class DanmakuEngine {
     }
   }
 
-  // 清空所有
+  // 清空所有（滚动轨道 + 停留槽位，清屏后槽位从 0 重新分配）
   clear() {
     for (let i = 0; i < this.trackCount; i++) {
       this.tracks.set(i, []);
     }
+    this.staySlots.clear();
   }
 }
 
