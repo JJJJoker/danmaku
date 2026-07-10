@@ -307,6 +307,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     }
   }, [settings.voiceEnabled]);
 
+  // 系统语音列表（Chromium 下 voices 异步加载，需订阅 voiceschanged 事件刷新）
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => ttsService.getVoices());
+  useEffect(() => {
+    const refresh = () => setVoices(ttsService.getVoices());
+    refresh();
+    return ttsService.onVoicesChanged(refresh);
+  }, []);
+  const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
+
   // 语音弹幕倒计时
   useEffect(() => {
     if (voiceCooldown <= 0) return;
@@ -892,6 +901,41 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                               onChange={(e) => updateSettings({ voiceVolume: Number(e.target.value) })}
                             />
                             <span className="cp-value">{Math.round(settings.voiceVolume * 100)}%</span>
+                          </div>
+                        </div>
+                        <div className="cp-setting-row">
+                          <label>音色</label>
+                          <select
+                            className="cp-select"
+                            value={settings.voiceURI}
+                            onChange={(e) => updateSettings({ voiceURI: e.target.value })}
+                          >
+                            <option value="">系统默认</option>
+                            {(zhVoices.length > 0 ? zhVoices : voices).map((v) => (
+                              <option key={v.voiceURI} value={v.voiceURI}>
+                                {v.name}（{v.lang}）
+                              </option>
+                            ))}
+                          </select>
+                          {voices.length > 0 && zhVoices.length === 0 && (
+                            <div className="cp-server-hint">未检测到中文语音包，已显示全部系统语音</div>
+                          )}
+                        </div>
+                        <div className="cp-setting-row">
+                          <div className="cp-speed-group">
+                            <button
+                              className="cp-speed-btn"
+                              onClick={() =>
+                                ttsService.speak('这是语音弹幕的试听效果', {
+                                  rate: settings.voiceRate,
+                                  volume: settings.voiceVolume,
+                                  voiceURI: settings.voiceURI,
+                                  timestamp: Date.now(),
+                                })
+                              }
+                            >
+                              试听
+                            </button>
                           </div>
                         </div>
                       </>

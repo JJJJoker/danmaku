@@ -31,7 +31,7 @@ export interface IncomingDanmakuDeps {
   addHistory: (item: HistoryItem) => void;
   speakVoice: (
     message: DanmakuMessage,
-    settings: Pick<DanmakuSettings, 'voiceEnabled' | 'voiceRate' | 'voiceVolume'>
+    settings: Pick<DanmakuSettings, 'voiceEnabled' | 'voiceRate' | 'voiceVolume' | 'voiceURI'>
   ) => void;
   notifyBot: (message: DanmakuMessage, roomId: string, isReplay: boolean) => void;
   /** electronAPI 在纯浏览器环境可能缺失，故可选 */

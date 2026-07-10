@@ -60,6 +60,7 @@ export interface DanmakuSettings {
   voiceEnabled: boolean;                           // 语音弹幕开关
   voiceRate: number;                               // 语速 (0.5-2.0)
   voiceVolume: number;                             // 音量 (0-1)
+  voiceURI: string;                                 // 语音音色 voiceURI，'' = 系统默认
 }
 
 // ========== 软件更新 ==========

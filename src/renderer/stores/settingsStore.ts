@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS: DanmakuSettings = {
   voiceEnabled: false,
   voiceRate: 1.0,
   voiceVolume: 1.0,
+  voiceURI: '',
 };
 
 export const useSettingsStore = create<SettingsState>()(

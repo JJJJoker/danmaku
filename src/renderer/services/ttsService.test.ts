@@ -27,7 +27,7 @@ function voiceMsg(overrides: Partial<DanmakuMessage> = {}): DanmakuMessage {
   };
 }
 
-const SETTINGS = { voiceEnabled: true, voiceRate: 1.2, voiceVolume: 0.8 };
+const SETTINGS = { voiceEnabled: true, voiceRate: 1.2, voiceVolume: 0.8, voiceURI: '' };
 
 afterEach(() => {
   vi.useRealTimers();
@@ -60,6 +60,7 @@ describe('speakVoiceDanmaku 去重与限频', () => {
     expect(speakSpy).toHaveBeenCalledWith('用户小A发来语音弹幕：大家好', {
       rate: 1.2,
       volume: 0.8,
+      voiceURI: '',
       timestamp: 12345,
     });
   });
@@ -120,6 +121,7 @@ describe('TTSService 队列与看门狗', () => {
     rate = 1;
     volume = 1;
     lang = '';
+    voice: SpeechSynthesisVoice | null = null;
     onend: (() => void) | null = null;
     onerror: ((e: { error: string }) => void) | null = null;
     constructor(text: string) {
@@ -127,7 +129,13 @@ describe('TTSService 队列与看门狗', () => {
     }
   }
 
-  let synth: { speak: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn>; getVoices: ReturnType<typeof vi.fn> };
+  let synth: {
+    speak: ReturnType<typeof vi.fn>;
+    cancel: ReturnType<typeof vi.fn>;
+    getVoices: ReturnType<typeof vi.fn>;
+    addEventListener: ReturnType<typeof vi.fn>;
+    removeEventListener: ReturnType<typeof vi.fn>;
+  };
 
   /** synth.speak 收到的第 n 个 utterance */
   function utteranceAt(n: number): FakeUtterance {
@@ -140,7 +148,13 @@ describe('TTSService 队列与看门狗', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    synth = { speak: vi.fn(), cancel: vi.fn(), getVoices: vi.fn(() => []) };
+    synth = {
+      speak: vi.fn(),
+      cancel: vi.fn(),
+      getVoices: vi.fn(() => []),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
     vi.stubGlobal('SpeechSynthesisUtterance', FakeUtterance);
     vi.stubGlobal('speechSynthesis', synth);
   });
@@ -254,5 +268,58 @@ describe('TTSService 队列与看门狗', () => {
     vi.stubGlobal('speechSynthesis', synth);
     svc.speak('听见了', { timestamp: 2 });
     expect(spokenTexts()).toEqual(['听见了']);
+  });
+
+  describe('音色选择 voiceURI', () => {
+    const VOICES = [
+      { name: '普通话女声', lang: 'zh-CN', voiceURI: 'zh-CN-female', default: false, localService: true } as SpeechSynthesisVoice,
+      { name: '普通话男声', lang: 'zh-CN', voiceURI: 'zh-CN-male', default: false, localService: true } as SpeechSynthesisVoice,
+      { name: 'English', lang: 'en-US', voiceURI: 'en-US-female', default: true, localService: true } as SpeechSynthesisVoice,
+    ];
+
+    beforeEach(() => {
+      synth.getVoices.mockReturnValue(VOICES);
+    });
+
+    it('传入存在的 voiceURI 时命中对应 voice', () => {
+      const svc = new TTSService();
+      svc.speak('文本', { timestamp: 1, voiceURI: 'zh-CN-male' });
+      expect(utteranceAt(0).voice).toEqual(VOICES[1]);
+    });
+
+    it('传入不存在的 voiceURI 时静默回落，不抛错、voice 保持 null', () => {
+      const svc = new TTSService();
+      expect(() => svc.speak('文本', { timestamp: 1, voiceURI: 'not-exist' })).not.toThrow();
+      expect(utteranceAt(0).voice).toBeNull();
+    });
+
+    it('不传 voiceURI 时 voice 保持未设置', () => {
+      const svc = new TTSService();
+      svc.speak('文本', { timestamp: 1 });
+      expect(utteranceAt(0).voice).toBeNull();
+    });
+
+    it('getChineseVoices 按 lang 前缀 zh 过滤', () => {
+      const svc = new TTSService();
+      expect(svc.getChineseVoices()).toEqual([VOICES[0], VOICES[1]]);
+    });
+
+    it('onVoicesChanged 注册并可取消订阅（同一回调）', () => {
+      const svc = new TTSService();
+      const callback = vi.fn();
+      const unsubscribe = svc.onVoicesChanged(callback);
+
+      expect(synth.addEventListener).toHaveBeenCalledWith('voiceschanged', callback);
+
+      unsubscribe();
+      expect(synth.removeEventListener).toHaveBeenCalledWith('voiceschanged', callback);
+    });
+
+    it('speechSynthesis 不可用时 onVoicesChanged 返回空操作，不抛错', () => {
+      vi.stubGlobal('speechSynthesis', undefined);
+      const svc = new TTSService();
+      const unsubscribe = svc.onVoicesChanged(() => {});
+      expect(() => unsubscribe()).not.toThrow();
+    });
   });
 });

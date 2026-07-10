@@ -20,6 +20,7 @@ const SETTINGS: DanmakuSettings = {
   voiceEnabled: true,
   voiceRate: 1,
   voiceVolume: 1,
+  voiceURI: '',
 };
 
 let seq = 0;
