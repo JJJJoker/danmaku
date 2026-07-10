@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useBotStore, getActivePersona, MIN_INTERVAL_FLOOR_SEC } from '../stores/botStore';
+import { useBotStore, getActivePersona, validateRoleName, MIN_INTERVAL_FLOOR_SEC } from '../stores/botStore';
 import { useConnectionStore } from '../stores/connectionStore';
 import { botService } from '../services/botService';
 
@@ -22,6 +22,7 @@ const BotPanel: React.FC = () => {
   // 人设编辑区本地草稿（切换角色时重置）
   const [personaDraft, setPersonaDraft] = useState(activePersona.persona);
   const [styleDraft, setStyleDraft] = useState(activePersona.style);
+  const [roleNameDraft, setRoleNameDraft] = useState(activePersona.roleName);
   const [showKey, setShowKey] = useState(false);
   const [savingPersona, setSavingPersona] = useState(false);
   const [notice, setNotice] = useState('');
@@ -29,6 +30,7 @@ const BotPanel: React.FC = () => {
   useEffect(() => {
     setPersonaDraft(activePersona.persona);
     setStyleDraft(activePersona.style);
+    setRoleNameDraft(activePersona.roleName);
   }, [config.activePersonaId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // 断线/切房时兜底停止（botService.trigger 内也有实时校验，这里让 UI 状态即时复位）
@@ -67,22 +69,40 @@ const BotPanel: React.FC = () => {
     void botService.trigger('manual');
   }, []);
 
-  // 保存修改：写回当前角色
+  // 保存修改：写回当前角色（含角色名）
   const handleSaveCurrent = useCallback(() => {
-    updatePersona(config.activePersonaId, { persona: personaDraft.trim(), style: styleDraft.trim() });
-    setNotice(`已保存到「${activePersona.roleName}」`);
-  }, [config.activePersonaId, personaDraft, styleDraft, updatePersona, activePersona.roleName]);
+    const err = validateRoleName(personas, roleNameDraft, config.activePersonaId);
+    if (err) {
+      setNotice(err);
+      return;
+    }
+    const newRoleName = roleNameDraft.trim();
+    updatePersona(config.activePersonaId, {
+      roleName: newRoleName,
+      persona: personaDraft.trim(),
+      style: styleDraft.trim(),
+    });
+    setNotice(`已保存到「${newRoleName}」`);
+  }, [personas, roleNameDraft, config.activePersonaId, personaDraft, styleDraft, updatePersona]);
 
-  // 存为新角色：LLM 自动起名 → 添加 → 切换
+  // 存为新角色：填了名字直接用（跳过 LLM 起名），留空才自动起名 → 添加 → 切换
   const handleSaveAsNew = useCallback(async () => {
     const personaText = personaDraft.trim();
     if (!personaText) {
       setNotice('请先填写人设描述');
       return;
     }
+    const customName = roleNameDraft.trim();
+    if (customName) {
+      const err = validateRoleName(personas, customName);
+      if (err) {
+        setNotice(err);
+        return;
+      }
+    }
     setSavingPersona(true);
     try {
-      const roleName = await botService.generateRoleName(personaText);
+      const roleName = customName || await botService.generateRoleName(personaText);
       const id = `per_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       addPersona({ id, roleName, persona: personaText, style: styleDraft.trim() });
       setActivePersona(id);
@@ -90,7 +110,7 @@ const BotPanel: React.FC = () => {
     } finally {
       setSavingPersona(false);
     }
-  }, [personaDraft, styleDraft, addPersona, setActivePersona]);
+  }, [personaDraft, styleDraft, roleNameDraft, personas, addPersona, setActivePersona]);
 
   const handleRemovePersona = useCallback((id: string, roleName: string) => {
     if (confirm(`确定删除角色「${roleName}」吗？`)) {
@@ -199,6 +219,17 @@ const BotPanel: React.FC = () => {
             )}
           </span>
         ))}
+      </div>
+      <div className="cp-bot-field">
+        <label>角色名（@提及触发词，{roleNameDraft.trim().length}/10）</label>
+        <input
+          type="text"
+          className="rp-join-input"
+          value={roleNameDraft}
+          maxLength={10}
+          placeholder="如：吐槽姬"
+          onChange={e => setRoleNameDraft(e.target.value)}
+        />
       </div>
       <div className="cp-bot-field">
         <label>人设描述（当前：{activePersona.roleName}）</label>

@@ -148,3 +148,15 @@ export function getActivePersona(state?: Pick<BotState, 'config' | 'personas'>):
     ?? s.personas.find(p => p.id === 'default')
     ?? DEFAULT_PERSONA;
 }
+
+/** 校验角色名：非空、去空白后 2-10 字、与其他人设不重名（excludeId 排除自身） */
+export function validateRoleName(personas: BotPersona[], name: string, excludeId?: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return '角色名不能为空';
+  if (trimmed.length < 2) return '角色名至少 2 个字（太短容易误触发 @ 提及）';
+  if (trimmed.length > 10) return '角色名最多 10 个字';
+  if (personas.some(p => p.id !== excludeId && p.roleName.trim() === trimmed)) {
+    return '角色名已被其他人设占用，换一个吧';
+  }
+  return null;
+}
