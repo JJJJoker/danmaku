@@ -33,6 +33,16 @@ describe('updateSettings / resetSettings 与持久化', () => {
     expect(Object.keys(persisted.state)).toEqual(['settings']); // partialize 只存 settings
   });
 
+  it('更新 voiceURI 并持久化', () => {
+    useSettingsStore.getState().updateSettings({ voiceURI: 'zh-CN-female' });
+
+    const state = useSettingsStore.getState().settings;
+    expect(state.voiceURI).toBe('zh-CN-female');
+
+    const persisted = JSON.parse(localStorage.getItem(KEY)!);
+    expect(persisted.state.settings.voiceURI).toBe('zh-CN-female');
+  });
+
   it('resetSettings 恢复全部默认值', () => {
     useSettingsStore.getState().updateSettings({ fontSize: 99, opacity: 0.1 });
     useSettingsStore.getState().resetSettings();
@@ -53,6 +63,7 @@ describe('merge 深合并（旧版 localStorage 兼容）', () => {
     expect(state.voiceEnabled).toBe(false); // v1.3.0 新增字段回落默认
     expect(state.overlayBounds).toEqual({ x: 0, y: 0, width: 100, height: 100 });
     expect(state.stayDuration).toBe(5000);
+    expect(state.voiceURI).toBe(''); // 新增字段回落默认
   });
 
   it('存档缺 settings 字段时不崩溃，得到完整默认设置', async () => {

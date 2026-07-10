@@ -351,6 +351,75 @@ describe('deleteRoom 授权', () => {
   });
 });
 
+describe('HTTP DELETE /rooms/:id', () => {
+  /** 发起 HTTP DELETE，testIp 经 x-test-ip 头映射到 resolveClientIp 注入缝反查房主身份 */
+  function httpDelete(roomId: string, opts: { testIp?: string; userId?: string } = {}) {
+    const query = opts.userId ? `?userId=${encodeURIComponent(opts.userId)}` : '';
+    return fetch(`http://127.0.0.1:${server.getHttpPort()}/rooms/${encodeURIComponent(roomId)}${query}`, {
+      method: 'DELETE',
+      headers: opts.testIp ? { 'x-test-ip': opts.testIp } : {},
+    });
+  }
+
+  it('房主经 HTTP 删除成功（无需 WS 连接），/stats 确认不复活', async () => {
+    const a = await client('10.0.0.1');
+    await join(a, 'room1', { userId: 'alice', isCreate: true });
+    a.close(); // 断开 ws，模拟"未连接时删除"
+
+    const res = await httpDelete('room1', { testIp: '10.0.0.1' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).message).toBe('房间已删除');
+
+    const stats = await fetchStats(server.getHttpPort());
+    expect(stats.totalRooms).toBe(0);
+    expect(stats.hostRooms).toEqual({});
+  });
+
+  it('非房主 IP 删除返回 403（房间保留）', async () => {
+    const a = await client('10.0.0.1');
+    await join(a, 'room1', { userId: 'alice', isCreate: true });
+    // 10.0.0.2 是已知用户（另有房间）但非 room1 房主
+    const b = await client('10.0.0.2');
+    await join(b, 'room2', { userId: 'bob', isCreate: true });
+
+    const res = await httpDelete('room1', { testIp: '10.0.0.2' });
+    expect(res.status).toBe(403);
+    expect((await res.json()).message).toBe('只有房主可以删除房间');
+    expect((await fetchStats(server.getHttpPort())).totalRooms).toBe(2);
+  });
+
+  it('删除不存在的房间返回 200（清除记录语义）', async () => {
+    const a = await client('10.0.0.1');
+    await join(a, 'room1', { userId: 'alice', isCreate: true });
+
+    const res = await httpDelete('ghost', { testIp: '10.0.0.1' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).message).toBe('房间已不存在，已从记录中清除');
+  });
+
+  it('IP 未知但带正确 ?userId= 时删除成功（兜底）', async () => {
+    const a = await client('10.0.0.1');
+    await join(a, 'room1', { userId: 'alice', isCreate: true });
+
+    // 服务器从未见过的 IP，但 query 带正确的房主 userId
+    const res = await httpDelete('room1', { testIp: '203.0.113.9', userId: 'alice' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).message).toBe('房间已删除');
+    expect((await fetchStats(server.getHttpPort())).totalRooms).toBe(0);
+  });
+
+  it('房内其他客户端在 HTTP 删除时收到 roomDeleted 广播', async () => {
+    const a = await client('10.0.0.1');
+    await join(a, 'room1', { userId: 'alice', isCreate: true });
+    const b = await client('10.0.0.2');
+    await join(b, 'room1', { userId: 'bob' });
+
+    const res = await httpDelete('room1', { testIp: '10.0.0.1' });
+    expect(res.status).toBe(200);
+    expect((await b.next('roomDeleted')).payload.roomId).toBe('room1');
+  });
+});
+
 describe('/stats 管理接口', () => {
   it('返回 JSON 且各统计字段数值正确', async () => {
     const a = await client('10.0.0.1');

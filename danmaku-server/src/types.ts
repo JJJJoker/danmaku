@@ -42,4 +42,6 @@ export type ServerMessage =
   | { type: 'joinError'; payload: { reason: string; message: string } }
   | { type: 'passwordChanged'; payload: { roomId: string; hasPassword: boolean; changedBy: string } }
   | { type: 'roomDeleted'; payload: { roomId: string; reason: string } }
+  | { type: 'error'; payload: { message: string } }       // 操作错误反馈（删除/改密码鉴权失败等）
+  | { type: 'success'; payload: { message: string } }      // 操作成功反馈
   | { type: 'pong'; payload: { timestamp: number; serverTime: number } };  // 用于测试服务器连接

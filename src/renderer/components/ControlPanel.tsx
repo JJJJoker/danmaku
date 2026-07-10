@@ -307,6 +307,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
     }
   }, [settings.voiceEnabled]);
 
+  // 系统语音列表（Chromium 下 voices 异步加载，需订阅 voiceschanged 事件刷新）
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => ttsService.getVoices());
+  useEffect(() => {
+    const refresh = () => setVoices(ttsService.getVoices());
+    refresh();
+    return ttsService.onVoicesChanged(refresh);
+  }, []);
+  const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
+
   // 语音弹幕倒计时
   useEffect(() => {
     if (voiceCooldown <= 0) return;
@@ -894,6 +903,41 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                             <span className="cp-value">{Math.round(settings.voiceVolume * 100)}%</span>
                           </div>
                         </div>
+                        <div className="cp-setting-row">
+                          <label>音色</label>
+                          <select
+                            className="cp-select"
+                            value={settings.voiceURI}
+                            onChange={(e) => updateSettings({ voiceURI: e.target.value })}
+                          >
+                            <option value="">系统默认</option>
+                            {(zhVoices.length > 0 ? zhVoices : voices).map((v) => (
+                              <option key={v.voiceURI} value={v.voiceURI}>
+                                {v.name}（{v.lang}）
+                              </option>
+                            ))}
+                          </select>
+                          {voices.length > 0 && zhVoices.length === 0 && (
+                            <div className="cp-server-hint">未检测到中文语音包，已显示全部系统语音</div>
+                          )}
+                        </div>
+                        <div className="cp-setting-row">
+                          <div className="cp-speed-group">
+                            <button
+                              className="cp-speed-btn"
+                              onClick={() =>
+                                ttsService.speak('这是语音弹幕的试听效果', {
+                                  rate: settings.voiceRate,
+                                  volume: settings.voiceVolume,
+                                  voiceURI: settings.voiceURI,
+                                  timestamp: Date.now(),
+                                })
+                              }
+                            >
+                              试听
+                            </button>
+                          </div>
+                        </div>
                       </>
                     )}
 
@@ -1042,6 +1086,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
                     <div className="cp-about-section-block">
                       <h4>📋 更新日志</h4>
+
+                      <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.5.2</span>
+                        <p><strong>✨ 新功能</strong></p>
+                        <ul>
+                          <li>语音弹幕支持选择音色：「设置」新增音色下拉（本机中文语音优先）与试听按钮，选择会保存</li>
+                          <li>吐槽姬角色名可自定义：在「吐槽姬」标签直接改名，弹幕中 @新名字 即可触发；存为新角色时填名直接用、留空仍由 AI 起名</li>
+                        </ul>
+                        <p><strong>🐛 修复</strong></p>
+                        <ul>
+                          <li>修复未连接房间时删除"我的房间"无效、刷新后又出现的问题（删除改为服务器确认制）</li>
+                          <li>修复切换房间后原房间状态残留、新房间莫名显示断线的问题</li>
+                          <li>删除当前房间后立即切换其它房间不再被误踢；操作失败现在会有明确提示</li>
+                        </ul>
+                      </div>
 
                       <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.5.1</span>

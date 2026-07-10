@@ -329,59 +329,14 @@ export class DanmakuServer {
 
             case 'deleteRoom':
               const { roomId: deleteRoomId, userId: deleterId } = message.payload;
-              
-              if (!this.rooms.has(deleteRoomId)) {
-                // 房间不存在，也从房主列表中移除
-                this.removeFromHostRooms(deleteRoomId);
-                ws.send(JSON.stringify({
-                  type: 'success',
-                  payload: { message: '房间已不存在，已从记录中清除' }
-                }));
-                break;
-              }
-              
-              const roomToDelete = this.rooms.get(deleteRoomId)!;
-              
-              // 验证权限: 通过 hostRooms 映射确认用户是否是房主
-              const hostRoomList = this.hostRooms.get(deleterId) || [];
-              if (!hostRoomList.includes(deleteRoomId) && deleterId !== roomToDelete.getHostUserId()) {
-                ws.send(JSON.stringify({
-                  type: 'error',
-                  payload: { message: '只有房主可以删除房间' }
-                }));
-                break;
-              }
-              
-              console.log(`[Server] Room deleted by host: ${deleteRoomId}, user: ${deleterId}`);
-              
-              // 通知房间内所有用户房间已被删除
-              roomToDelete.broadcast({
-                type: 'roomDeleted',
-                payload: {
-                  roomId: deleteRoomId,
-                  reason: '房主删除了房间'
-                }
-              });
-              
-              // 清理用户会话
-              roomToDelete.getClients().forEach((client, uid) => {
-                this.userSessions.delete(uid);
-              });
-              
-              // 从房主列表中移除
-              this.removeFromHostRooms(deleteRoomId);
-
-              // 删除房间（持久化同步，重启不复活）
-              this.rooms.delete(deleteRoomId);
-              this.store.deleteRoom(deleteRoomId);
-              
+              // 删除核心抽到 performDeleteRoom 供 WS / HTTP 复用；WS 信任 payload.userId 作为鉴权候选
+              const wsDeleteResult = this.performDeleteRoom(deleteRoomId, [deleterId]);
               ws.send(JSON.stringify({
-                type: 'success',
-                payload: { message: '房间已删除' }
+                type: wsDeleteResult.ok ? 'success' : 'error',
+                payload: { message: wsDeleteResult.message }
               }));
-              
               break;
-              
+
             default:
               console.warn('[Server] Unknown message type:', message.type);
           }
@@ -426,9 +381,9 @@ export class DanmakuServer {
     this.httpServer = createServer((req, res) => {
       // 设置CORS头,允许跨域请求
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      
+
       // 处理OPTIONS预检请求
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
@@ -438,13 +393,29 @@ export class DanmakuServer {
 
       // 客户端自动更新资产分发（/updates/<file>），逻辑独立在 updates-static.ts
       let pathname = '';
+      let searchParams = new URLSearchParams();
       try {
-        pathname = new URL(req.url ?? '', 'http://localhost').pathname;
+        const parsedUrl = new URL(req.url ?? '', 'http://localhost');
+        pathname = parsedUrl.pathname;
+        searchParams = parsedUrl.searchParams;
       } catch {
         // 畸形 URL 交给下面的 404 分支
       }
       if (isUpdatesRequest(pathname)) {
         void serveUpdateFile(req, res, pathname);
+        return;
+      }
+
+      // 房间删除端点：DELETE /rooms/:id —— 用 IP 反查房主身份（比 WS 信任 payload 更权威），
+      // 未连接（ws 已关闭）时也能删除，另接受 ?userId= 兜底
+      if (req.method === 'DELETE' && pathname.startsWith('/rooms/')) {
+        const roomId = decodeURIComponent(pathname.slice('/rooms/'.length));
+        const ipUserId = this.ipToUserId.get(this.resolveClientIp(req));
+        const queryUserId = searchParams.get('userId');
+        const authorizedUserIds = [ipUserId, queryUserId].filter(Boolean) as string[];
+        const result = this.performDeleteRoom(roomId, authorizedUserIds);
+        res.writeHead(result.ok ? 200 : 403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: result.message }));
         return;
       }
 
@@ -604,6 +575,53 @@ export class DanmakuServer {
     if (toDelete.length > 0) {
       console.log(`[Server] Cleaned up ${toDelete.length} rooms, remaining: ${this.rooms.size}`);
     }
+  }
+
+  /**
+   * 删除房间的核心逻辑，供 WS `deleteRoom` 与 HTTP `DELETE /rooms/:id` 复用。
+   * authorizedUserIds 为鉴权候选 userId 列表（WS 传 payload.userId；HTTP 传 IP 反查 + ?userId 兜底），
+   * 任一为房主即放行。返回 { ok, message }，三条文案与历史 WS 行为逐字一致。
+   */
+  private performDeleteRoom(roomId: string, authorizedUserIds: string[]): { ok: boolean; message: string } {
+    if (!this.rooms.has(roomId)) {
+      // 房间不存在，也从房主列表中移除（清除记录语义，无需鉴权）
+      this.removeFromHostRooms(roomId);
+      return { ok: true, message: '房间已不存在，已从记录中清除' };
+    }
+
+    const roomToDelete = this.rooms.get(roomId)!;
+
+    // 验证权限: 任一候选 userId 在 hostRooms 映射中或等于房主 userId 即放行
+    const isAuthorized = authorizedUserIds.some((uid) => {
+      if (!uid) return false;
+      const hostRoomList = this.hostRooms.get(uid) || [];
+      return hostRoomList.includes(roomId) || uid === roomToDelete.getHostUserId();
+    });
+    if (!isAuthorized) {
+      return { ok: false, message: '只有房主可以删除房间' };
+    }
+
+    console.log(`[Server] Room deleted by host: ${roomId}, authorized: ${authorizedUserIds.filter(Boolean).join(',')}`);
+
+    // 通知房间内所有用户房间已被删除
+    roomToDelete.broadcast({
+      type: 'roomDeleted',
+      payload: { roomId, reason: '房主删除了房间' }
+    });
+
+    // 清理用户会话
+    roomToDelete.getClients().forEach((client, uid) => {
+      this.userSessions.delete(uid);
+    });
+
+    // 从房主列表中移除
+    this.removeFromHostRooms(roomId);
+
+    // 删除房间（持久化同步，重启不复活）
+    this.rooms.delete(roomId);
+    this.store.deleteRoom(roomId);
+
+    return { ok: true, message: '房间已删除' };
   }
 
   // 辅助方法: 从房主列表中移除房间

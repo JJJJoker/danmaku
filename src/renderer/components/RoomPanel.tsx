@@ -15,7 +15,17 @@ const MAX_HISTORY = 20;
 function loadRoomHistory(): RoomHistoryItem[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    // Bug 5：归一化兼容 connectionStore 旧写入格式（role:'guest'、lastJoined、含 password）
+    return parsed
+      .filter((h: any) => h && h.roomId)
+      .map((h: any): RoomHistoryItem => ({
+        roomId: h.roomId,
+        roomName: h.roomName ?? h.roomId,
+        role: h.role === 'host' ? 'host' : 'client',   // 'guest'/其它一律归为 'client'
+        timestamp: h.timestamp ?? h.lastJoined ?? Date.now(),
+      }));
   } catch { return []; }
 }
 
@@ -86,11 +96,16 @@ const RoomPanel: React.FC = () => {
     setPassword,  // 新增
     deleteRoom,   // 新增
     syncOwnedRoomsFromServer,  // 启动时同步房间列表
+    notice,       // 服务器操作反馈（error/success）
+    clearNotice,
   } = useConnectionStore();
-  
+
   // 获取当前房间的isHost状态
   const currentRoom = activeRoomId ? rooms[activeRoomId] : null;
   const isHost = currentRoom?.isHost || false;
+
+  // 统一"在线"口径（Bug 3）：房间存在且状态为 connected 才算在线
+  const isOnline = useCallback((id: string) => rooms[id]?.status === 'connected', [rooms]);
   
   // 添加调试日志查看ownedRooms的值
   useEffect(() => {
@@ -113,10 +128,23 @@ const RoomPanel: React.FC = () => {
     }
   }, [inlineError]);
 
-  // 处理删除房间
-  const handleDeleteRoom = useCallback((roomId: string) => {
-    if (confirm(`确定要删除房间 "${roomId}" 吗?此操作不可恢复!`)) {
-      deleteRoom(roomId);
+  // 服务器操作反馈（error/success）镜像到内联提示 toast，用后清除 store notice
+  useEffect(() => {
+    if (notice) {
+      setInlineError(notice.message);
+      clearNotice();
+    }
+  }, [notice, clearNotice]);
+
+  // 处理删除房间（异步等待服务器确认；confirm 弹窗会打断鼠标穿透，无论确认与否都要重置）
+  const handleDeleteRoom = useCallback(async (roomId: string) => {
+    const confirmed = confirm(`确定要删除房间 "${roomId}" 吗?此操作不可恢复!`);
+    window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
+    if (!confirmed) return;
+    try {
+      await deleteRoom(roomId);
+    } catch (e) {
+      console.warn('[RoomPanel] deleteRoom error:', e);
     }
   }, [deleteRoom]);
 
@@ -141,7 +169,7 @@ const RoomPanel: React.FC = () => {
     const id = joinRoomId.trim();
     if (!id) return;
     // 已连接该房间且连接正常时直接切换
-    if (rooms[id] && rooms[id].status === 'connected') {
+    if (isOnline(id)) {
       switchRoom(id);
       setJoinRoomId('');
       return;
@@ -158,7 +186,7 @@ const RoomPanel: React.FC = () => {
     } catch {
       // error handled by store
     }
-  }, [joinRoomId, joinRoom, rooms, switchRoom, showJoinPassword, joinPassword]);
+  }, [joinRoomId, joinRoom, isOnline, switchRoom, showJoinPassword, joinPassword]);
 
   const handleCopyRoomId = useCallback((idToCopy?: string) => {
     const textToCopy = idToCopy || activeRoomId;
@@ -367,8 +395,17 @@ const RoomPanel: React.FC = () => {
                   <button
                     className="rp-btn rp-btn-sm"
                     onClick={() => {
-                      // 房主进入自己的房间，不需要密码（服务器已处理豁免）
-                      joinRoom(room.roomId);
+                      // 房主进入自己的房间：已在线直接切换，否则加入（服务器已豁免房主密码）
+                      if (isOnline(room.roomId)) {
+                        switchRoom(room.roomId);
+                      } else {
+                        joinRoom(room.roomId)
+                          .then(() => {
+                            const updated = addToHistory({ roomId: room.roomId, roomName: room.roomName, role: 'host' });
+                            setRoomHistory(updated);
+                          })
+                          .catch(() => {});
+                      }
                     }}
                   >
                     进入
@@ -397,12 +434,12 @@ const RoomPanel: React.FC = () => {
           <div className="rp-history-header">保存的房间</div>
           <div className="rp-history-list">
             {filteredHistory.map((item) => {
-              const isOnline = !!rooms[item.roomId];
+              const online = isOnline(item.roomId);
               const isEditing = editingRoomId === item.roomId;
               return (
                 <div key={item.roomId} className="rp-history-item">
                   <div className="rp-history-info">
-                    <span className={`rp-history-dot ${isOnline ? 'rp-dot-online' : 'rp-dot-offline'}`} title={isOnline ? '在线' : '离线'} />
+                    <span className={`rp-history-dot ${online ? 'rp-dot-online' : 'rp-dot-offline'}`} title={online ? '在线' : '离线'} />
                     <span className={`rp-history-role ${item.role === 'host' ? 'rp-history-host' : 'rp-history-client'}`}>
                       {item.role === 'host' ? 'H' : 'C'}
                     </span>
@@ -450,7 +487,7 @@ const RoomPanel: React.FC = () => {
                     <button
                       className="rp-btn rp-btn-sm"
                       onClick={() => {
-                        if (isOnline) {
+                        if (online) {
                           switchRoom(item.roomId);
                           return;
                         }
@@ -470,7 +507,7 @@ const RoomPanel: React.FC = () => {
                         }
                       }}
                     >
-                      {isOnline ? '切换' : (item.role === 'host' ? '创建' : '加入')}
+                      {online ? '切换' : (item.role === 'host' ? '创建' : '加入')}
                     </button>
                     <button
                       className="rp-btn rp-btn-sm rp-btn-danger"

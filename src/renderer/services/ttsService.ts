@@ -9,6 +9,7 @@ interface QueueItem {
   timestamp: number;
   rate: number;
   volume: number;
+  voiceURI: string;
 }
 
 export class TTSService {
@@ -31,7 +32,7 @@ export class TTSService {
   /**
    * 朗读文字（按时间戳顺序排队）
    */
-  speak(text: string, options?: { rate?: number; volume?: number; lang?: string; timestamp?: number }) {
+  speak(text: string, options?: { rate?: number; volume?: number; lang?: string; timestamp?: number; voiceURI?: string }) {
     console.log('[TTS] speak() called:', { text: text.substring(0, 30), synthAvailable: !!this.synth, queueLength: this.queue.length });
     if (!this.synth) {
       console.warn('[TTS] SpeechSynthesis not available');
@@ -50,6 +51,7 @@ export class TTSService {
     const rate = options?.rate ?? 1.0;
     const volume = options?.volume ?? 1.0;
     const timestamp = options?.timestamp ?? Date.now();
+    const voiceURI = options?.voiceURI ?? '';
 
     // 如果队列太长，丢弃最早的
     if (this.queue.length >= this.maxQueueSize) {
@@ -57,7 +59,7 @@ export class TTSService {
     }
 
     // 插入队列并按时间戳排序
-    this.queue.push({ text, timestamp, rate, volume });
+    this.queue.push({ text, timestamp, rate, volume, voiceURI });
     this.queue.sort((a, b) => a.timestamp - b.timestamp);
 
     this.processQueue();
@@ -73,6 +75,11 @@ export class TTSService {
     utterance.rate = item.rate;
     utterance.volume = item.volume;
     utterance.lang = 'zh-CN';
+    if (item.voiceURI) {
+      const match = this.getVoices().find(v => v.voiceURI === item.voiceURI);
+      if (match) utterance.voice = match;
+      // 找不到（语音包被卸载/换机器）时静默回落系统默认，不抛错
+    }
     this.currentUtterance = utterance;
 
     // 10 秒超时：强制停止当前语音
@@ -167,6 +174,17 @@ export class TTSService {
   getChineseVoices(): SpeechSynthesisVoice[] {
     return this.getVoices().filter(v => v.lang.startsWith('zh'));
   }
+
+  /**
+   * 订阅系统语音列表变化（Chromium 下 voices 异步加载），返回取消订阅函数
+   */
+  onVoicesChanged(callback: () => void): () => void {
+    if (!this.synth) return () => {};
+    this.synth.addEventListener('voiceschanged', callback);
+    return () => {
+      this.synth?.removeEventListener('voiceschanged', callback);
+    };
+  }
 }
 
 export const ttsService = new TTSService();
@@ -184,7 +202,7 @@ const lastSpokenAtBySender = new Map<string, number>();
  */
 export function speakVoiceDanmaku(
   message: DanmakuMessage,
-  settings: Pick<DanmakuSettings, 'voiceEnabled' | 'voiceRate' | 'voiceVolume'>
+  settings: Pick<DanmakuSettings, 'voiceEnabled' | 'voiceRate' | 'voiceVolume' | 'voiceURI'>
 ) {
   if (!message.isVoice || !settings.voiceEnabled) return;
 
@@ -208,6 +226,7 @@ export function speakVoiceDanmaku(
   ttsService.speak(`用户${message.sender || '匿名'}发来语音弹幕：${message.text}`, {
     rate: settings.voiceRate,
     volume: settings.voiceVolume,
+    voiceURI: settings.voiceURI,
     timestamp: message.timestamp,
   });
 }

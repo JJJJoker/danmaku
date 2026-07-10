@@ -1,7 +1,7 @@
 // WebSocket 服务器中继连接（云端 danmaku-server）
 // 由原 peerService.ts 拆分而来；P2P 模式已于 v1.5.0 移除，服务器中继是唯一联机方式
 import { DanmakuMessage, RoomUser, ServerMessage } from '../../shared/types';
-import { resolveServerUrl, deriveStatsUrl } from './serverConfig';
+import { resolveServerUrl, deriveStatsUrl, deriveRoomDeleteUrl } from './serverConfig';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 export type PeerRole = 'host' | 'client' | 'none';
@@ -15,6 +15,8 @@ export interface PeerEventCallbacks {
   onUserJoin: (user: RoomUser) => void;
   onUserLeave: (userId: string) => void;
   onRoomDeleted?: (reason: string) => void;
+  // 服务器操作反馈（如删除/改密码鉴权的 error/success），用于向用户呈现可见提示
+  onServerNotice?: (notice: { kind: 'error' | 'success'; message: string }) => void;
 }
 
 export class ServerConnection {
@@ -36,6 +38,13 @@ export class ServerConnection {
   }
 
   async joinRoom(roomId: string, username: string, password?: string, isCreate?: boolean): Promise<void> {
+    // 双保险：若存在旧 ws（调用方未先 disconnect，或 attemptReconnect 复用同实例），
+    // 先做等价 disconnect 的自清理，避免孤儿 socket 的 onclose 污染新连接状态并触发错位重连。
+    // disconnect() 会置 _intentionalDisconnect=true，下面几行会立即复位为 false，不影响本次连接。
+    if (this.ws) {
+      this.disconnect();
+    }
+
     // 每次连接时重新解析地址，用户在设置中改地址后重连即生效
     const serverUrl = resolveServerUrl();
     if (!serverUrl) {
@@ -213,6 +222,16 @@ export class ServerConnection {
         console.log(`[ServerConnection] Room deleted: ${message.payload.reason}`);
         this.callbacks?.onRoomDeleted?.(message.payload.reason);
         break;
+
+      case 'error':
+        console.warn(`[ServerConnection] Server error notice: ${message.payload.message}`);
+        this.callbacks?.onServerNotice?.({ kind: 'error', message: message.payload.message });
+        break;
+
+      case 'success':
+        console.log(`[ServerConnection] Server success notice: ${message.payload.message}`);
+        this.callbacks?.onServerNotice?.({ kind: 'success', message: message.payload.message });
+        break;
     }
   }
 
@@ -285,6 +304,10 @@ export class ServerConnection {
     }
   }
 
+  /**
+   * @deprecated 走 WS 发删除请求，ws 未打开时会被 send() 静默丢弃（"删了又回来"根因之一）。
+   * 已由静态方法 deleteRoomOnServer（HTTP DELETE，等确认）取代，保留仅为兼容。
+   */
   deleteRoom(roomId: string): void {
     this.send({
       type: 'deleteRoom',
@@ -294,6 +317,35 @@ export class ServerConnection {
       }
     });
     console.log(`[ServerConnection] Requested to delete room: ${roomId}`);
+  }
+
+  /**
+   * 经 HTTP DELETE /rooms/:id 删除房间，等待服务器确认（不依赖 ws 连接）。
+   * 服务器用请求方 IP 反查房主身份，userId 作为兜底一并带上。
+   * 返回 { ok, message }：ok=true 表示已删除或本就不存在（清除记录语义），调用方据此决定是否移除本地。
+   */
+  static async deleteRoomOnServer(roomId: string, userId?: string): Promise<{ ok: boolean; message: string }> {
+    const url = deriveRoomDeleteUrl(roomId, userId);
+    if (!url) {
+      return { ok: false, message: '未配置服务器地址' };
+    }
+    try {
+      const res = await fetch(url, { method: 'DELETE' });
+      let message = '';
+      try {
+        const body = await res.json();
+        message = body?.message || '';
+      } catch {
+        // 响应体非 JSON，用状态码兜底文案
+      }
+      if (res.ok) {
+        return { ok: true, message: message || '房间已删除' };
+      }
+      return { ok: false, message: message || `删除失败 (${res.status})` };
+    } catch (e) {
+      console.error('[ServerConnection] deleteRoomOnServer failed:', e);
+      return { ok: false, message: '无法连接服务器' };
+    }
   }
 
   // 从服务器获取房间统计信息

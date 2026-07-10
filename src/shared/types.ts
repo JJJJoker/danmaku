@@ -33,7 +33,9 @@ export type ServerMessage =
   | { type: 'joinSuccess'; payload: { roomId: string; userId: string; isHost: boolean; password?: string; hasPassword?: boolean } }
   | { type: 'joinError'; payload: { reason: string; message: string } }
   | { type: 'passwordChanged'; payload: { roomId: string; hasPassword: boolean; changedBy: string } }
-  | { type: 'roomDeleted'; payload: { roomId: string; reason: string } };
+  | { type: 'roomDeleted'; payload: { roomId: string; reason: string } }
+  | { type: 'error'; payload: { message: string } }       // 服务器操作错误反馈（删除/改密码鉴权失败等）
+  | { type: 'success'; payload: { message: string } };     // 服务器操作成功反馈
 
 // 设置
 export interface OverlayBounds {
@@ -60,6 +62,7 @@ export interface DanmakuSettings {
   voiceEnabled: boolean;                           // 语音弹幕开关
   voiceRate: number;                               // 语速 (0.5-2.0)
   voiceVolume: number;                             // 音量 (0-1)
+  voiceURI: string;                                 // 语音音色 voiceURI，'' = 系统默认
 }
 
 // ========== 软件更新 ==========
