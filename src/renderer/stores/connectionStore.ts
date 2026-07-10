@@ -83,6 +83,11 @@ interface ConnectionState {
   setPassword: (roomId: string, password: string) => void;  // 新增
   deleteRoom: (roomId: string) => Promise<void>;  // 新增
 
+  // 服务器操作反馈（error/success），供 UI 镜像到 toast 提示；用后 clearNotice
+  notice: { kind: 'error' | 'success'; message: string } | null;
+  setNotice: (notice: { kind: 'error' | 'success'; message: string }) => void;
+  clearNotice: () => void;
+
   // 便捷属性（来自当前活跃房间）
   status: ConnectionStatus;
   role: PeerRole;
@@ -98,6 +103,21 @@ interface ConnectionState {
   _onDanmaku: ((danmaku: DanmakuMessage, roomId: string, isReplay?: boolean) => void) | null;
   // 内部：为服务器模式设置回调
   _setupServerCallbacks: (roomId: string, connection: ServerConnection) => void;
+}
+
+// 辅助：全局只有一条物理连接，切换/新建房间成功后把除 exceptId 外仍非 disconnected 的房间置为
+// disconnected，避免"旧房间永远显示在线"（Bug 3）。返回新 map，不修改入参。
+function markOthersDisconnected(
+  rooms: Record<string, RoomState>,
+  exceptId: string
+): Record<string, RoomState> {
+  const next: Record<string, RoomState> = {};
+  for (const [id, room] of Object.entries(rooms)) {
+    next[id] = (id !== exceptId && room.status !== 'disconnected')
+      ? { ...room, status: 'disconnected' }
+      : room;
+  }
+  return next;
 }
 
 // 辅助：从 rooms 中获取活跃房间的便捷属性
@@ -255,6 +275,11 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   error: null,
   logs: [],
 
+  // 服务器操作反馈
+  notice: null,
+  setNotice: (notice) => set({ notice }),
+  clearNotice: () => set({ notice: null }),
+
   addLog: (roomId: string, message: string) => {
     const logEntry = `[${new Date().toLocaleTimeString()}] ${message}`;
     set(state => {
@@ -332,7 +357,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     };
 
     set(state => {
-      const updatedRooms = { ...state.rooms, [roomId]: newRoom };
+      // 新房间为唯一活跃连接，其它房间置离线
+      const updatedRooms = { ...markOthersDisconnected(state.rooms, roomId), [roomId]: newRoom };
       return {
         rooms: updatedRooms,
         activeRoomId: roomId,
@@ -389,23 +415,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         ServerConnection.saveRoomPassword(roomId, password);
       }
 
-      // 保存到历史房间列表
-      const history = JSON.parse(localStorage.getItem('funapp-room-history') || '[]');
-      const existingIndex = history.findIndex((r: any) => r.roomId === roomId);
-
-      const historyItem = {
-        roomId,
-        roomName: roomId,
-        password: password || ServerConnection.getRoomPassword(roomId),
-        lastJoined: Date.now(),
-        role: conn.getIsHost() ? 'host' : 'guest'
-      };
-
-      if (existingIndex >= 0) {
-        history.splice(existingIndex, 1);
-      }
-      history.unshift(historyItem);
-      localStorage.setItem('funapp-room-history', JSON.stringify(history.slice(0, 50)));
+      // 注：房间历史（funapp-room-history）写入已下放到 RoomPanel（Bug 5：两套不兼容 schema 合一），
+      // 此处不再写，避免格式冲突
 
       set(state => {
         const room = state.rooms[roomId];
@@ -426,7 +437,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           role: isHost ? 'host' : 'client',
           logs: [...room.logs, `[${new Date().toLocaleTimeString()}] ✅ 成功加入房间 ${roomId}`],
         };
-        const updatedRooms = { ...state.rooms, [roomId]: updatedRoom };
+        // 该房间为唯一活跃连接，其它房间置离线
+        const updatedRooms = { ...markOthersDisconnected(state.rooms, roomId), [roomId]: updatedRoom };
         return {
           rooms: updatedRooms,
           ...getActiveRoomProps(updatedRooms, state.activeRoomId),
@@ -494,21 +506,71 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
   switchRoom: async (roomId: string) => {
     const { rooms, activeRoomId, username } = get();
-    if (!rooms[roomId]) return;
+    // 已是活跃房间或目标不存在：直接早退（现有语义）
+    if (activeRoomId === roomId || !rooms[roomId]) return;
 
-    // 切换到其他房间需要重新加入目标房间
-    if (activeRoomId !== roomId) {
-      const conn = getServerConnection();
-      get()._setupServerCallbacks(roomId, conn);
+    // Bug 2：与 joinRoom action 一致——先断开旧单例连接并置空，再新建，
+    // 避免复用旧连接时孤儿 socket 的 onclose 污染新房间状态并触发错位重连
+    if (serverConnection) {
+      serverConnection.disconnect();
+      serverConnection = null;
+    }
+    const conn = getServerConnection();
+    get()._setupServerCallbacks(roomId, conn);
+
+    // 目标房间置 connecting 并切为活跃，其它房间置离线
+    set(state => {
+      const room = state.rooms[roomId];
+      if (!room) return {};
+      const switching: RoomState = { ...room, status: 'connecting', error: null };
+      const updatedRooms = { ...markOthersDisconnected(state.rooms, roomId), [roomId]: switching };
+      return {
+        rooms: updatedRooms,
+        activeRoomId: roomId,
+        ...getActiveRoomProps(updatedRooms, roomId),
+      };
+    });
+
+    try {
       // 尝试使用缓存密码加入房间
       const cachedPassword = ServerConnection.getRoomPassword(roomId);
       await conn.joinRoom(roomId, username || '匿名用户', cachedPassword);
-    }
 
-    set({
-      activeRoomId: roomId,
-      ...getActiveRoomProps(rooms, roomId),
-    });
+      set(state => {
+        const room = state.rooms[roomId];
+        if (!room) return {};
+        const isHost = conn.getIsHost();
+        const updatedRoom: RoomState = {
+          ...room,
+          status: 'connected',
+          isHost,
+          role: isHost ? 'host' : 'client',
+          logs: [...room.logs, `[${new Date().toLocaleTimeString()}] ✅ 已切换到房间 ${roomId}`],
+        };
+        const updatedRooms = { ...markOthersDisconnected(state.rooms, roomId), [roomId]: updatedRoom };
+        return {
+          rooms: updatedRooms,
+          ...getActiveRoomProps(updatedRooms, roomId),
+        };
+      });
+    } catch (err: any) {
+      set(state => {
+        const room = state.rooms[roomId];
+        if (!room) return {};
+        const updatedRoom: RoomState = {
+          ...room,
+          status: 'error',
+          error: err.message || '切换房间失败',
+          logs: [...room.logs, `[${new Date().toLocaleTimeString()}] ❌ 切换失败: ${err.message}`],
+        };
+        const updatedRooms = { ...state.rooms, [roomId]: updatedRoom };
+        return {
+          rooms: updatedRooms,
+          ...getActiveRoomProps(updatedRooms, state.activeRoomId),
+        };
+      });
+      throw err;
+    }
 
     // 切换成功后同步服务器房间列表
     console.log('[ConnectionStore] Calling syncOwnedRoomsFromServer after switchRoom');
@@ -575,25 +637,26 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   },
 
   deleteRoom: async (roomId: string) => {
-    // 使用当前连接发送删除消息（服务器通过 hostRooms 映射验证权限，不需要在目标房间内）
-    const myUserId = localStorage.getItem('funapp-user-id');
-    const conn = serverConnection;
+    // Bug 1：经 HTTP DELETE 等服务器确认，成功才移除本地，失败保留并弹提示——根除"删了又回来"
+    const myUserId = localStorage.getItem('funapp-user-id') || undefined;
+    const result = await ServerConnection.deleteRoomOnServer(roomId, myUserId);
 
-    if (conn && myUserId) {
-      // 发送删除请求，服务器会验证用户是否是房主
-      conn.deleteRoom(roomId);
-      console.log(`[ConnectionStore] Sent delete request for room: ${roomId}`);
-    } else {
-      console.warn('[ConnectionStore] No connection or userId, skipping server delete');
+    if (!result.ok) {
+      // 删除失败：保留本地房间与 ownedRooms，弹出可见错误提示
+      get().setNotice({ kind: 'error', message: result.message });
+      get().addLog(roomId, `❌ 删除房间失败: ${result.message}`);
+      return;
     }
 
-    // 从我的房间列表中移除
+    // 删除成功：先记日志（此时房间可能仍在 rooms 中），再清理本地状态
+    get().addLog(roomId, `🗑️ 已删除房间: ${roomId}`);
     get().removeOwnedRoom(roomId);
-
-    // 清除密码缓存
     ServerConnection.clearRoomPassword(roomId);
 
-    get().addLog(roomId, `🗑️ 已删除房间: ${roomId}`);
+    // 删的是当前活跃房间时，断开物理连接（避免孤儿连接的重连/回调）
+    if (get().activeRoomId === roomId) {
+      clearServerConnection();
+    }
 
     // 从rooms状态中移除该房间
     set(state => {
@@ -607,6 +670,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         ...getActiveRoomProps(remainingRooms, newActiveRoomId),
       };
     });
+
+    get().setNotice({ kind: 'success', message: result.message });
 
     // 同步服务器房间列表
     await get().syncOwnedRoomsFromServer();
@@ -715,14 +780,38 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         });
         get().addLog(roomId, `👋 用户离开: ${userId}`);
       },
+      onServerNotice: (notice) => {
+        // 服务器操作反馈镜像到 store，供 UI 弹提示
+        get().setNotice(notice);
+        get().addLog(roomId, notice.kind === 'error' ? `❌ ${notice.message}` : `✅ ${notice.message}`);
+      },
       onRoomDeleted: (reason) => {
         console.log(`[Store] Room deleted: ${reason}`);
+        // Bug 4：同步处理 + 幂等守卫（房间已被移除则直接返回，防与 HTTP 自删重复）
+        if (!get().rooms[roomId]) return;
+
         get().addLog(roomId, `❌ 房间已被删除: ${reason}`);
-        
-        // 断开连接
-        setTimeout(() => {
-          get().disconnectRoom(roomId);
-        }, 1000);
+
+        // 判断是否需要断开物理连接：仅当被删房间是当前活跃房间、且全局连接仍是本回调
+        // 捕获的连接实例时才断开——防止竞态下（删除回调迟到）误断已切换到的新房间连接。
+        const shouldClear = get().activeRoomId === roomId && serverConnection === connection;
+
+        // 移除该房间并重算 activeRoomId / 便捷属性（不再调用会误发 leave 的 disconnectRoom）
+        set(state => {
+          const { [roomId]: _, ...remainingRooms } = state.rooms;
+          const newActiveRoomId = state.activeRoomId === roomId
+            ? (Object.keys(remainingRooms)[0] || '')
+            : state.activeRoomId;
+          return {
+            rooms: remainingRooms,
+            activeRoomId: newActiveRoomId,
+            ...getActiveRoomProps(remainingRooms, newActiveRoomId),
+          };
+        });
+
+        if (shouldClear) {
+          clearServerConnection();
+        }
       },
     });
   },

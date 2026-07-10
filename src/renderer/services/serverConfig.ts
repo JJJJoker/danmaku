@@ -47,3 +47,20 @@ export function deriveStatsUrl(): string | null {
     return null;
   }
 }
+
+// 由 WebSocket 地址派生房间删除 HTTP 端点地址（同 stats 约定：HTTP 端口 = 弹幕端口 + 1）
+// 返回 null 表示未配置服务器或无显式端口（无法按 +1 推导）
+export function deriveRoomDeleteUrl(roomId: string, userId?: string): string | null {
+  const url = resolveServerUrl();
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.port) return null; // 无显式端口无法按 +1 约定推导
+    const httpProtocol = parsed.protocol === 'wss:' ? 'https:' : 'http:';
+    const httpPort = parseInt(parsed.port, 10) + 1;
+    const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    return `${httpProtocol}//${parsed.hostname}:${httpPort}/rooms/${encodeURIComponent(roomId)}${query}`;
+  } catch {
+    return null;
+  }
+}
