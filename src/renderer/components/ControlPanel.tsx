@@ -1088,6 +1088,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       <h4>📋 更新日志</h4>
 
                       <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.5.2</span>
+                        <p><strong>✨ 新功能</strong></p>
+                        <ul>
+                          <li>语音弹幕支持选择音色：「设置」新增音色下拉（本机中文语音优先）与试听按钮，选择会保存</li>
+                          <li>吐槽姬角色名可自定义：在「吐槽姬」标签直接改名，弹幕中 @新名字 即可触发；存为新角色时填名直接用、留空仍由 AI 起名</li>
+                        </ul>
+                        <p><strong>🐛 修复</strong></p>
+                        <ul>
+                          <li>修复未连接房间时删除"我的房间"无效、刷新后又出现的问题（删除改为服务器确认制）</li>
+                          <li>修复切换房间后原房间状态残留、新房间莫名显示断线的问题</li>
+                          <li>删除当前房间后立即切换其它房间不再被误踢；操作失败现在会有明确提示</li>
+                        </ul>
+                      </div>
+
+                      <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.5.1</span>
                         <p><strong>🔧 优化</strong></p>
                         <ul>
