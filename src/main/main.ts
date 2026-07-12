@@ -249,7 +249,9 @@ function createControlWindow() {
 }
 
 function setupIpcHandlers() {
-  // 动态切换鼠标穿透（弹幕窗口）
+  // 动态切换鼠标穿透——无论哪个窗口调用，始终作用于弹幕窗口（mainWindow）。
+  // 控制面板窗口自身常驻接收鼠标事件，输入框聚焦无需（也不应）调用本 IPC：
+  // ignore=false 会让全屏透明弹幕窗口吞掉整屏点击，导致背后应用点不动。
   ipcMain.on('set-ignore-mouse-events', (_event, ignore: boolean, options?: { forward: boolean }) => {
     if (mainWindow) {
       mainWindow.setIgnoreMouseEvents(ignore, options || { forward: true });

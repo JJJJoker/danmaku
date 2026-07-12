@@ -555,12 +555,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              onFocus={() => {
-                window.electronAPI?.setIgnoreMouseEvents(false);
-              }}
-              onBlur={() => {
-                window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
-              }}
               maxLength={100}
               style={{ position: 'relative', zIndex: 10000 }}
             />
@@ -607,12 +601,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 value={voiceInputText}
                 onChange={(e) => setVoiceInputText(e.target.value)}
                 onKeyDown={handleVoiceKeyDown}
-                onFocus={() => {
-                  window.electronAPI?.setIgnoreMouseEvents(false);
-                }}
-                onBlur={() => {
-                  window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
-                }}
                 maxLength={100}
                 disabled={voiceCooldown > 0}
                 style={{ position: 'relative', zIndex: 10000 }}
