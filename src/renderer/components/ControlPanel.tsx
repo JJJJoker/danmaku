@@ -1076,6 +1076,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                       <h4>📋 更新日志</h4>
 
                       <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.5.3</span>
+                        <p><strong>🐛 修复</strong></p>
+                        <ul>
+                          <li>修复点击弹幕/语音输入框后，弹幕层背后的应用短暂无法点击的问题</li>
+                        </ul>
+                      </div>
+
+                      <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.5.2</span>
                         <p><strong>✨ 新功能</strong></p>
                         <ul>
