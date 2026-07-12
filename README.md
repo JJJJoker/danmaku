@@ -8,7 +8,7 @@
 
 <!-- 本区块由 scripts/bump-version.js 维护，版本号行请勿手改格式 -->
 
-- 当前版本：**v1.5.2**
+- 当前版本：**v1.5.3**
 - 下载安装包：[GitHub Releases](https://github.com/JJJJoker/danmaku/releases/latest)（Windows 安装版/便携版、macOS dmg）
 - Windows 安装版支持应用内自动更新；各版本更新说明见 Releases 页
 

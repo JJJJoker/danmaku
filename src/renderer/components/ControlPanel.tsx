@@ -555,12 +555,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              onFocus={() => {
-                window.electronAPI?.setIgnoreMouseEvents(false);
-              }}
-              onBlur={() => {
-                window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
-              }}
               maxLength={100}
               style={{ position: 'relative', zIndex: 10000 }}
             />
@@ -607,12 +601,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
                 value={voiceInputText}
                 onChange={(e) => setVoiceInputText(e.target.value)}
                 onKeyDown={handleVoiceKeyDown}
-                onFocus={() => {
-                  window.electronAPI?.setIgnoreMouseEvents(false);
-                }}
-                onBlur={() => {
-                  window.electronAPI?.setIgnoreMouseEvents(true, { forward: true });
-                }}
                 maxLength={100}
                 disabled={voiceCooldown > 0}
                 style={{ position: 'relative', zIndex: 10000 }}
@@ -1086,6 +1074,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ standalone = false }) => {
 
                     <div className="cp-about-section-block">
                       <h4>📋 更新日志</h4>
+
+                      <div className="cp-changelog-entry">
+                        <span className="cp-changelog-version">v1.5.3</span>
+                        <p><strong>🐛 修复</strong></p>
+                        <ul>
+                          <li>修复点击弹幕/语音输入框后，弹幕层背后的应用短暂无法点击的问题</li>
+                        </ul>
+                      </div>
 
                       <div className="cp-changelog-entry">
                         <span className="cp-changelog-version">v1.5.2</span>
